@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0066CC">
+  <meta name="description" content="室内墙面喷涂机器人数字孪生仿真系统 - 纯前端离线演示">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230066CC'/%3E%3Cpath d='M5 27h8v-6H5zM9 21V9h8l5 6v6h-4v-4l-5-6v10z' fill='white'/%3E%3Ccircle cx='24' cy='8' r='3' fill='%23FFCC00'/%3E%3C/svg%3E">
+  <title>智能墙面喷涂机器人仿真系统</title>
+  <link rel="stylesheet" href="css/lib/element-plus.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M5 27h8v-6H5zM9 21V9h8l5 6v6h-4v-4l-5-6v10z" fill="currentColor"/><circle cx="24" cy="8" r="3" fill="#FFCC00"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>智能墙面喷涂机器人仿真系统</h1>
+        <p>室内墙面喷涂 · 六轴机械臂数字孪生</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill" id="headerStatus"><span class="dot"></span><span id="headerStatusText">系统就绪</span></div>
+      <span class="version">V1.2.0</span>
+      <button class="icon-btn" id="btnShare" title="分享二维码" aria-label="分享二维码">QR</button>
+      <button class="icon-btn" id="btnHelp" title="使用说明" aria-label="使用说明">?</button>
+      <button class="icon-btn" id="btnFullscreen" title="全屏显示" aria-label="全屏显示">⛶</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel left-panel" id="leftPanel" data-tab="motion">
+      <div class="panel-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="motion" role="tab">运动控制</button>
+        <button class="tab-btn" data-tab="craft" role="tab">喷涂工艺</button>
+        <button class="tab-btn" data-tab="teach" role="tab">示教</button>
+        <button class="tab-btn" data-tab="display" role="tab">显示设置</button>
+      </div>
+      <div class="panel-body">
+        <section class="panel-section" data-section="motion">
+          <div class="section-head">
+            <h2>六轴关节控制</h2>
+            <span class="chip" id="jointLockTip">角度限位保护</span>
+          </div>
+          <div class="joint-list" id="jointList"></div>
+
+          <div class="section-head mt-18">
+            <h2>快捷姿态</h2>
+            <span class="chip ghost">一键到达</span>
+          </div>
+          <div class="pose-grid" id="poseGrid"></div>
+
+          <div class="spray-actions">
+            <button class="btn btn-warning" id="btnSprayToggle">开始喷涂</button>
+            <button class="btn btn-outline" id="btnSprayStop">停止喷涂</button>
+          </div>
+          <p class="tiny notice-line">提示：拖动关节滑块前请确认喷涂已停止。</p>
+        </section>
+        <section class="panel-section" data-section="craft">
+          <div class="section-head">
+            <h2>涂料参数库</h2>
+            <span class="chip">QZDS 001–024</span>
+          </div>
+          <div class="cat-tabs" id="catTabs" role="tablist"></div>
+          <div class="coating-list" id="coatingList"></div>
+          <div class="take-card" id="takeCard"></div>
+
+          <div class="adaptive-box">
+            <div class="adaptive-head">
+              <div class="adaptive-title"><b>自适应工艺</b><span>按涂层 + 选区自动匹配</span></div>
+              <label class="switch-row" aria-label="自适应工艺">
+                <input type="checkbox" id="chkAdaptive"><i class="switch"></i>
+              </label>
+            </div>
+            <p class="adaptive-hint" id="adaptiveHint">关闭时使用手动参数；开启后按涂层与选区自动匹配压力、扇幅、膜厚与走枪速度。</p>
+          </div>
+
+          <div class="section-head mt-18">
+            <h2>工艺参数</h2>
+            <button class="mini-btn" id="btnNozzleStage">喷嘴特写</button>
+          </div>
+          <div class="param-list" id="paramList"></div>
+
+          <div class="section-head mt-18">
+            <h2>工艺模板</h2>
+            <span class="chip ghost">推荐参数</span>
+          </div>
+          <div class="template-list" id="templateList"></div>
+          <p class="tiny notice-line">超出推荐范围的参数将以红色提示，可能影响喷涂质量。</p>
+        </section>
+
+        <section class="panel-section" data-section="teach">
+          <div class="section-head">
+            <h2>示教点位</h2>
+            <span class="chip" id="teachCount">0 点</span>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-warning" id="btnRecord">记录点位</button>
+            <button class="btn btn-primary" id="btnPlayback">轨迹回放</button>
+            <button class="btn btn-outline" id="btnStopPlayback">停止</button>
+          </div>
+          <div class="teach-list" id="teachList"></div>
+          <button class="btn btn-ghost full" id="btnClearTeach">清空当前点位</button>
+
+          <div class="section-head mt-18">
+            <h2>轨迹库</h2>
+            <span class="chip ghost">本地保存</span>
+          </div>
+          <div class="inline-field">
+            <input class="input" id="trajName" maxlength="20" placeholder="输入轨迹名称" aria-label="轨迹名称">
+            <button class="btn btn-primary btn-sm" id="btnSaveTraj">保存</button>
+          </div>
+          <div class="inline-field">
+            <select class="input select" id="savedSelect" aria-label="已保存轨迹"></select>
+            <button class="btn btn-outline btn-sm" id="btnLoadTraj">加载</button>
+            <button class="btn btn-danger-ghost btn-sm" id="btnDeleteTraj">删除</button>
+          </div>
+          <p class="tiny notice-line">轨迹保存在浏览器 localStorage 中，刷新页面后仍可使用。</p>
+        </section>
+        <section class="panel-section" data-section="display">
+          <div class="section-head">
+            <h2>模型图层</h2>
+            <span class="chip ghost">显示 / 隐藏</span>
+          </div>
+          <div class="switch-list" id="layerList"></div>
+
+          <div class="section-head mt-18">
+            <h2>渲染与效果</h2>
+          </div>
+          <div class="switch-list">
+            <label class="switch-row">
+              <span>喷涂粒子</span>
+              <input type="checkbox" id="chkParticles" checked><i class="switch"></i>
+            </label>
+            <label class="switch-row">
+              <span>深色主题</span>
+              <input type="checkbox" id="chkTheme"><i class="switch"></i>
+            </label>
+          </div>
+          <div class="field-row mt-10">
+            <span>渲染画质</span>
+            <select class="input select" id="selQuality">
+              <option value="high">高清（默认）</option>
+              <option value="medium">均衡</option>
+              <option value="low">流畅</option>
+            </select>
+          </div>
+
+          <div class="section-head mt-18">
+            <h2>机械臂模型</h2>
+            <span class="chip ghost">GLB 可选</span>
+          </div>
+          <p class="muted small">默认使用内置程序化六轴模型，开箱即用；也可加载自定义 GLB 模型。</p>
+          <div class="btn-row">
+            <button class="btn btn-outline" id="btnLoadGLB">选择本地 GLB</button>
+            <button class="btn btn-ghost" id="btnResetModel">恢复内置</button>
+          </div>
+          <input type="file" id="glbFile" accept=".glb,.gltf" hidden>
+          <div class="note-box" id="modelStatus">当前模型：内置六轴工业机械臂</div>
+          <p class="tiny">模型约定：Y 轴向上、单位米、Z 轴朝前，节点名为 J1–J6。详见 models/README.md。</p>
+
+          <div class="section-head mt-18">
+            <h2>表面涂层</h2>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-outline" id="btnClearWall">清除表面涂层</button>
+            <button class="btn btn-ghost" id="btnResetAll">恢复初始状态</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+    <section class="canvas-panel" id="canvasPanel">
+      <div id="viewport"></div>
+
+      <div class="canvas-badges">
+        <span class="badge" id="canvasState">系统就绪</span>
+        <span class="badge ghost" id="canvasTool">喷涂枪</span>
+        <span class="badge ghost" id="canvasMaterial">腻子</span>
+        <span class="badge ghost spray-off" id="canvasSpray">喷涂关闭</span>
+      </div>
+
+      <div class="view-switch" id="viewSwitch">
+        <button class="active" data-view="overview">全局</button>
+        <button data-view="arm">机械臂</button>
+        <button data-view="wall">墙面</button>
+        <button data-view="nozzle">喷嘴特写</button>
+        <button id="btnFollow" data-view="follow" aria-pressed="false" title="视角跟随机器人">跟随</button>
+      </div>
+
+      <div class="tool-switch" id="toolSwitch" aria-label="末端模组快速切换">
+        <span>末端</span>
+        <button class="active" data-tool="spray">喷涂</button>
+        <button data-tool="trowel">刮腻子</button>
+        <button data-tool="sander">打磨腻子</button>
+      </div>
+
+      <div class="scene-switch">
+        <span>场景</span>
+        <select id="sceneSelect" aria-label="喷涂场景"></select>
+      </div>
+
+      <div class="surface-switch" id="surfaceSwitch" aria-label="作业面选择">
+        <span>作业面</span>
+        <button class="active" data-surface="wall">墙面</button>
+        <button data-surface="ceiling">天花板</button>
+        <button data-surface="floor">地面</button>
+      </div>
+
+      <div class="nozzle-stage hidden" id="nozzleStage">
+        <canvas id="nozzleCanvas"></canvas>
+        <div class="noz-hud noz-top">
+          <div class="noz-title">
+            <span class="noz-code" id="nozCode">QZDS-001</span>
+            <div class="noz-name">
+              <b id="nozName">防静电涂层</b>
+              <span id="nozSpec">表面电阻 · 目标干膜</span>
+            </div>
+          </div>
+          <div class="noz-actions">
+            <button class="noz-badge" id="nozAdaptiveBtn">手动参数</button>
+            <button class="noz-btn" id="nozClose" aria-label="关闭喷嘴特写">×</button>
+          </div>
+        </div>
+
+        <div class="noz-hud noz-side noz-left">
+          <div class="noz-stat"><span>雾化粒径 d50</span><b id="nozD50">--</b></div>
+          <div class="noz-stat"><span>粒子速度</span><b id="nozVel">--</b></div>
+          <div class="noz-stat"><span>活跃粒子</span><b id="nozCount">--</b></div>
+        </div>
+
+        <div class="noz-hud noz-side noz-right">
+          <div class="noz-stat"><span>单道湿膜</span><b id="nozPass">--</b></div>
+          <div class="noz-stat"><span>理论流量</span><b id="nozFlow">--</b></div>
+          <div class="noz-stat"><span>预计道数</span><b id="nozPasses">--</b></div>
+        </div>
+
+        <div class="noz-hud noz-bottom">
+          <div class="noz-sliders">
+            <div class="noz-slider">
+              <label>喷涂面积 <em id="nozFanVal">--</em></label>
+              <input type="range" data-noz-param="fanWidth" aria-label="喷涂面积">
+            </div>
+            <div class="noz-slider">
+              <label>压力 <em id="nozPressureVal">--</em></label>
+              <input type="range" data-noz-param="pressure" aria-label="喷涂压力">
+            </div>
+            <div class="noz-slider">
+              <label>厚薄 <em id="nozThicknessVal">--</em></label>
+              <input type="range" data-noz-param="thickness" aria-label="涂层厚度">
+            </div>
+            <div class="noz-slider">
+              <label>速度 <em id="nozSpeedVal">--</em></label>
+              <input type="range" data-noz-param="speed" aria-label="移动速度">
+            </div>
+          </div>
+          <div class="noz-film">
+            <span>湿膜进度</span>
+            <div class="noz-film-bar"><i id="nozFilmBar"></i></div>
+            <b id="nozFilmPct">0%</b>
+          </div>
+          <p class="noz-tip">工艺预览 · 粒子形态随喷涂面积 / 压力 / 厚薄 / 速度实时变化</p>
+        </div>
+      </div>
+
+      <div class="canvas-alert hidden" id="canvasAlert">
+        <span class="alert-icon">!</span>
+        <span id="alertText">检测到碰撞风险，已停止运动</span>
+        <button id="alertClose" aria-label="关闭提示">×</button>
+      </div>
+
+      <div class="select-toolbar">
+        <button class="btn-mini" id="btnSelectArea">框选区域</button>
+        <button class="btn-mini" id="btnGenPath">生成 S 路径</button>
+        <button class="btn-mini accent" id="btnRunPath">执行喷涂</button>
+        <button class="btn-mini ghost" id="btnClearPath">清除</button>
+        <span class="select-info" id="selectInfo">未选择区域</span>
+      </div>
+
+      <div class="canvas-hint">左键旋转 · 右键平移 · 滚轮缩放</div>
+      <button class="canvas-fs" id="btnCanvasFull" title="全屏查看">全屏</button>
+    </section>
+
+    <aside class="panel right-panel" id="rightPanel">
+      <div class="panel-body dashboard-body">
+        <div class="panel-head">
+          <h2>设备状态</h2>
+          <span class="status-badge ready" id="deviceStatus">就绪</span>
+        </div>
+
+        <div class="status-card">
+          <div class="status-line"><span>运行状态</span><b id="runStateText">系统就绪</b></div>
+          <div class="tank-row">
+            <span>料桶余量</span>
+            <b id="tankValue">100%</b>
+            <button class="mini-btn" id="btnInventory">库存总览</button>
+            <button class="mini-btn" id="btnRefill">补充</button>
+          </div>
+          <div class="progress"><div class="progress-bar" id="tankBar" style="width:100%"></div></div>
+          <div class="status-line"><span>本次用时</span><b id="taskTimer">00:00</b></div>
+        </div>
+
+        <div class="estop-wrap">
+          <button class="estop-btn" id="estopBtn"><span>急停</span><small>EMERGENCY STOP</small></button>
+          <p>按下后立即锁死关节并停止喷涂</p>
+        </div>
+
+        <div class="metric-title">
+          <h2>实时数据</h2>
+          <span id="telemetryTime">--:--:--</span>
+        </div>
+        <div class="joint-telemetry" id="jointTelemetry"></div>
+
+        <div class="metric-grid">
+          <div class="metric"><span>末端 X</span><b id="tcpX">--</b></div>
+          <div class="metric"><span>末端 Y</span><b id="tcpY">--</b></div>
+          <div class="metric"><span>末端 Z</span><b id="tcpZ">--</b></div>
+          <div class="metric"><span>作业速度</span><b id="speedValue">0.00 m/s</b></div>
+          <div class="metric"><span>作业面积</span><b id="areaValue">0.00 ㎡</b></div>
+          <div class="metric"><span>覆盖率</span><b id="coverageValue">0.0%</b></div>
+          <div class="metric"><span>物料消耗</span><b id="consumptionValue">0.00 L</b></div>
+          <div class="metric"><span>作业距离</span><b id="distanceValue">0.00 m</b></div>
+        </div>
+
+        <div class="fault-actions">
+          <button class="btn btn-danger-ghost full" id="btnResetFault">解除故障 / 急停锁定</button>
+        </div>
+
+        <div class="log-head">
+          <h2>运行日志</h2>
+          <button id="btnClearLog">清空</button>
+        </div>
+        <div class="log-list" id="logList" aria-live="polite"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+<nav class="mobile-nav" id="mobileNav" aria-label="移动端导航">
+  <button class="mobile-nav-btn active" data-mview="motion">
+    <svg viewBox="0 0 24 24"><path d="M4 18h4V9H4zm6 0h4V5h-4zm6 0h4v-6h-4z"/></svg><span>运动</span>
+  </button>
+  <button class="mobile-nav-btn" data-mview="craft">
+    <svg viewBox="0 0 24 24"><path d="M7 3h10v4H7zm-2 5h14v3H5zm2 4h10v9H7z"/></svg><span>工艺</span>
+  </button>
+  <button class="mobile-nav-btn" data-mview="teach">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5zM2 12l10 5 10-5v3l-10 5L2 15z"/></svg><span>示教</span>
+  </button>
+  <button class="mobile-nav-btn" data-mview="dashboard">
+    <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z"/></svg><span>看板</span>
+  </button>
+  <button class="mobile-nav-btn" data-mview="display">
+    <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L14.9 3h-4l-.4 2.8a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.8 7.8 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.9h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM12.9 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg><span>设置</span>
+  </button>
+</nav>
+
+<button class="mobile-estop" id="mobileEstop" aria-label="紧急停止"><span>急停</span></button>
+<div class="toast-stack" id="toastStack" aria-live="assertive"></div>
+
+<div class="modal-mask hidden" id="inventoryModal">
+  <div class="modal modal-lg inventory-modal">
+    <div class="modal-head"><h3>涂料库存总览</h3><button class="modal-close" data-close="inventoryModal">×</button></div>
+    <div class="modal-body inv-body">
+      <div class="inv-hero">
+        <div class="inv-donut" id="invDonut">
+          <div class="inv-donut-core"><b id="invPercent">--</b><span>综合剩余</span></div>
+        </div>
+        <div class="inv-metrics">
+          <div class="inv-metric"><span>总剩余</span><b id="invRemainL">--</b></div>
+          <div class="inv-metric"><span>总容量</span><b id="invTotalL">--</b></div>
+          <div class="inv-metric"><span>当前料桶</span><b id="invCurrentL">--</b></div>
+          <div class="inv-metric"><span>剩余可喷面积</span><b id="invArea">--</b></div>
+        </div>
+      </div>
+      <div class="inv-current" id="invCurrentCard"></div>
+      <div class="section-head mt-18">
+        <h2>分类库存</h2>
+        <span class="chip ghost" id="invCount">26 种</span>
+      </div>
+      <div class="inv-filter" id="invFilter"></div>
+      <div class="inv-list" id="invList"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" data-close="inventoryModal">关闭</button>
+      <button class="btn btn-primary" id="btnInventoryRefill">补充当前涂料</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask hidden" id="shareModal">
+  <div class="modal share-modal">
+    <div class="modal-head"><h3>分享访问二维码</h3><button class="modal-close" data-close="shareModal">×</button></div>
+    <div class="modal-body share-body">
+      <div class="share-qr" id="shareQr"></div>
+      <div class="share-url" id="shareUrl">--</div>
+      <button class="btn btn-outline full" id="btnCopyShare">复制访问链接</button>
+      <p class="share-tip" id="shareTip">手机扫码即可打开本系统。</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" data-close="shareModal">关闭</button></div>
+  </div>
+</div>
+
+<div class="modal-mask hidden" id="helpModal">
+  <div class="modal modal-lg">
+    <div class="modal-head"><h3>使用说明</h3><button class="modal-close" data-close="helpModal">×</button></div>
+    <div class="modal-body help-content">
+      <div class="help-grid">
+        <div>
+          <h4>快速开始</h4>
+          <ol>
+            <li>在画布右上角「场景」切换住宅、洁净厂房、钢结构厂房、储罐区、配电房等不同室内模型。</li>
+            <li>在「喷涂工艺」的涂料参数库选择涂层（QZDS 001–024），查看取料参数；可开启「自适应工艺」自动匹配压力、扇幅、膜厚与速度。</li>
+            <li>在画布左下方选择作业面「墙面 / 天花板 / 地面」，点击「框选区域」并拖出矩形，再「生成 S 路径」。</li>
+            <li>点击「开始喷涂」或「执行喷涂」，机器人底盘会自动行驶至作业面，伸臂后按 S 形轨迹喷涂并统计面积与耗料。</li>
+            <li>点击画布右上角「喷嘴特写」或工艺面板中的按钮，可查看雾化粒子与湿膜堆积的自适应动态。</li>
+            <li>画布左上方可快速切换末端模组「喷涂 / 刮腻子 / 打磨腻子」；右上角「跟随」让相机随机器人移动。</li>
+          </ol>
+        </div>
+        <div>
+          <h4>示教与回放</h4>
+          <ol>
+            <li>调整到目标位姿后点击「记录点位」，重复生成轨迹。</li>
+            <li>输入名称保存到本地轨迹库，刷新页面后仍可加载。</li>
+            <li>点击「轨迹回放」将自动插补各点位并联动喷涂。</li>
+          </ol>
+          <h4>视图与分享</h4>
+          <p>鼠标左键旋转、右键平移、滚轮缩放；触屏单指旋转、双指缩放。右上角「跟随」锁定机器人，点击「QR」生成当前访问链接二维码，手机横屏可获得完整操作界面。</p>
+        </div>
+      </div>
+      <div class="help-note">
+        <b>离线运行：</b>所有依赖已随项目打包，双击 index.html 即可运行，无需网络。浏览器需支持 WebGL2；若使用 GLB 外部模型，请通过「显示设置 → 选择本地 GLB」载入。
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" data-close="helpModal">我知道了</button></div>
+  </div>
+</div>
+
+<div class="modal-mask hidden" id="statsModal">
+  <div class="modal">
+    <div class="modal-head"><h3>本次作业统计</h3><button class="modal-close" data-close="statsModal">×</button></div>
+    <div class="modal-body">
+      <div class="stats-hero"><span>本次作业面积</span><b id="statsArea">0.00 ㎡</b></div>
+      <div class="stats-table" id="statsTable"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" data-close="statsModal">关闭</button>
+      <button class="btn btn-primary" id="btnExportCSV">导出任务数据 (CSV)</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/lib/three.min.js"></script>
+<script src="js/lib/BufferGeometryUtils.js"></script>
+<script src="js/lib/OrbitControls.js"></script>
+<script src="js/lib/GLTFLoader.js"></script>
+<script src="js/lib/vue.global.prod.js"></script>
+<script src="js/lib/element-plus.full.min.js"></script>
+<script src="js/lib/element-plus.zh-cn.min.js"></script>
+<script src="js/lib/qrcode.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/robot.js"></script>
+<script src="js/spray.js"></script>
+<script src="js/tool.js"></script>
+<script src="js/nozzle.js"></script>
+<script src="js/teach.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
