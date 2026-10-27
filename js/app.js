@@ -1120,6 +1120,9 @@
         push(cu + 0.9, cv);
         push(cu, cv - 0.9);
         push(cu, cv + 0.9);
+        // 贴墙拐角时底盘向房间中心退让，避免机械臂上举时肘部折向墙面
+        push(U.clamp(cu, -R.width / 2 + 1.3, R.width / 2 - 1.3),
+          U.clamp(cv, -R.depth / 2 + 1.1, R.depth / 2 - 1.1));
       } else {
         push(cu, cv + 1.15);
         push(cu, cv - 1.15);
@@ -1350,13 +1353,81 @@
       }
       const distance = U.clamp(p.distance || 0.3, 0.14, 0.65);
       const rowCount = Math.max(1, Math.ceil((maxV - minV) / gap) + 1);
+      // 天花板/地面遇到贯通到作业面的障碍（如结构立柱）时，让行线绕开，
+      // 否则机械臂与喷枪会从障碍中穿过
+      const keepouts = [];
+      const edgeKeepouts = [];
+      if (!sf.isWall) {
+        const R = C.room;
+        (this.scene.obstacles || []).forEach((ob) => {
+          const touches = surface === 'ceiling'
+            ? ob.box.max.y >= R.height - 0.08
+            : ob.box.min.y <= 0.08;
+          if (touches) {
+            keepouts.push({ u0: ob.box.min.x, u1: ob.box.max.x, v0: ob.box.min.z, v1: ob.box.max.z });
+            return;
+          }
+          // 未贯通到作业面但贴墙外凸的障碍（窗框等）只收窄靠该墙的路径端点
+          let side = null;
+          if (ob.box.max.x >= R.width / 2 - 0.6) side = 'right';
+          else if (ob.box.min.x <= -R.width / 2 + 0.6) side = 'left';
+          if (side) edgeKeepouts.push({ side: side, u0: ob.box.min.x, u1: ob.box.max.x, v0: ob.box.min.z, v1: ob.box.max.z });
+        });
+      }
       const corners = [];
       for (let i = 0; i < rowCount; i++) {
         const v = rowCount === 1 ? (minV + maxV) / 2 : U.lerp(minV, maxV, i / (rowCount - 1));
-        const ua = i % 2 === 0 ? minU : maxU;
-        const ub = i % 2 === 0 ? maxU : minU;
-        corners.push({ u: ua, v: v }, { u: ub, v: v });
+        let ua = i % 2 === 0 ? minU : maxU;
+        let ub = i % 2 === 0 ? maxU : minU;
+        // 行端点若落在障碍避让区内，按行进方向截到障碍边界，避免回程扫过障碍
+        keepouts.forEach((k) => {
+          const m = 0.42;
+          if (v <= k.v0 - m || v >= k.v1 + m) return;
+          const aIn = ua > k.u0 - m && ua < k.u1 + m;
+          const bIn = ub > k.u0 - m && ub < k.u1 + m;
+          if (ub > ua) {
+            if (bIn) ub = Math.min(ub, k.u0 - m);
+            if (aIn) ua = Math.max(ua, k.u1 + m);
+          } else {
+            if (bIn) ub = Math.max(ub, k.u1 + m);
+            if (aIn) ua = Math.min(ua, k.u0 - m);
+          }
+        });
+        edgeKeepouts.forEach((k) => {
+          const m = 0.42;
+          if (v <= k.v0 - m || v >= k.v1 + m) return;
+          if (k.side === 'right') {
+            const lim = k.u0 - m;
+            ua = Math.min(ua, lim);
+            ub = Math.min(ub, lim);
+          } else {
+            const lim = k.u1 + m;
+            ua = Math.max(ua, lim);
+            ub = Math.max(ub, lim);
+          }
+        });
+        if (Math.abs(ub - ua) < 0.1) continue;
+        const rowPts = [{ u: ua, v: v }];
+        keepouts.forEach((k) => {
+          const m = 0.42;
+          const kv0 = k.v0 - m, kv1 = k.v1 + m;
+          if (v <= kv0 || v >= kv1) return;
+          const lo = Math.min(ua, ub), hi = Math.max(ua, ub);
+          const ku0 = k.u0 - m, ku1 = k.u1 + m;
+          if (ku1 <= lo || ku0 >= hi) return;
+          const e0 = Math.max(lo, ku0), e1 = Math.min(hi, ku1);
+          if (e1 - e0 < 0.05) return;
+          const dv = U.clamp(kv1 + 0.02, vLimit.min, vLimit.max);
+          if (ub > ua) {
+            rowPts.push({ u: e0, v: v }, { u: e0, v: dv }, { u: e1, v: dv }, { u: e1, v: v });
+          } else {
+            rowPts.push({ u: e1, v: v }, { u: e1, v: dv }, { u: e0, v: dv }, { u: e0, v: v });
+          }
+        });
+        rowPts.push({ u: ub, v: v });
+        corners.push(...rowPts);
       }
+      if (!corners.length) return null;
       const dense = [corners[0]];
       for (let i = 1; i < corners.length; i++) {
         const a = corners[i - 1], b = corners[i];
@@ -1427,6 +1498,7 @@
       };
       let bestOverall = null;
       const stats = [];
+      const results = [];
 
       candidates.forEach((cand) => {
         const route = this.baseRoute(fromBase, cand);
@@ -1460,7 +1532,8 @@
             list.push({ u: q.u, v: q.v, surface: surface, angles: sol.angles });
           });
           this.robot.setJoints(startJoints);
-          const cost = invalid * 1000 + unreachable * 50 + collisions * 20 + pathMax * 2 +
+          // 擦墙会直接触发停机，权重远高于可达性不足
+          const cost = invalid * 1000 + unreachable * 50 + collisions * 400 + pathMax * 2 +
             (pathSum / Math.max(1, list.length - 1)) * 0.5;
           return { branch: branch, list: list, unreachable: unreachable + invalid, collisions: collisions, pathMax: pathMax, cost: cost };
         };
@@ -1475,10 +1548,36 @@
           branch: best.branch, points: best.list.length, unreachable: best.unreachable,
           collisions: best.collisions, cost: Number(total.toFixed(1))
         });
+        results.push({ cand: cand, route: route, best: best, total: total, approach: null });
         if (!bestOverall || total < bestOverall.total) {
           bestOverall = { cand: cand, route: route, best: best, total: total };
         }
       });
+
+      // 底盘落点还要能安全接近首点：拐角处同样的关节直线会甩向墙面，
+      // 因此按代价从低到高挑选“接近可行”的落点，最多尝试 3 个
+      const approachOk = (r) => {
+        const first = r.best.list[0];
+        if (!first) return false;
+        this.robot.setBasePose(r.cand.x, r.cand.z, r.cand.yaw);
+        const fromJ = this.robot.computeTransportJoints().slice();
+        const pos = this.scene.surfacePoint(surface, first.u, first.v, distance);
+        if (this.jointLineClear(fromJ, first.angles, 26)) return true;
+        return !!this.cartesianApproach(fromJ, first.angles, pos, normal, r.best.branch);
+      };
+      const ranked = results.slice().sort((a, b) => a.total - b.total);
+      let chosen = null;
+      for (let i = 0; i < ranked.length && i < 3; i++) {
+        ranked[i].approach = approachOk(ranked[i]);
+        if (ranked[i].approach) { chosen = ranked[i]; break; }
+      }
+      if (!chosen) chosen = ranked.length ? ranked[0] : bestOverall;
+      if (!chosen) {
+        this.robot.setBasePose(fromBase.x, fromBase.z, fromBase.yaw);
+        this.robot.setJoints(startJoints);
+        return null;
+      }
+      bestOverall = chosen;
 
       this.robot.setBasePose(fromBase.x, fromBase.z, fromBase.yaw);
       this.robot.setJoints(startJoints);
@@ -1647,14 +1746,23 @@
     },
 
     // TCP 直线接近：先原地调整喷枪朝向，再沿直线逐点逆解，避免关节插值在拐角处甩向墙面
-    cartesianApproach(from, to, pos, dir) {
+    cartesianApproach(from, to, pos, dir, branch) {
       const robot = this.robot;
-      const branches = this.pathBranch ? [this.pathBranch, -this.pathBranch] : [1, -1];
-      const tryBranch = (branch) => {
+      const baseBranch = branch != null ? branch : this.pathBranch;
+      const branches = baseBranch ? [baseBranch, -baseBranch] : [1, -1];
+      // 直线接近失败时，先从朝向房间中心的一侧抬到作业高度，再横向接近目标，
+      // 避免机械臂为了够到贴墙点而把肘部折向墙面
+      const routes = [[pos]];
+      const center = new THREE.Vector3(-pos.x, 0, -pos.z);
+      if (center.lengthSq() > 0.09) {
+        center.normalize();
+        const lift = pos.clone().addScaledVector(center, 0.8);
+        routes.push([lift, pos]);
+        routes.push([lift.clone().add(new THREE.Vector3(0, -0.5, 0)), pos]);
+      }
+      const tryRoute = (waypoints, branch) => {
         robot.setJoints(from);
         const startPos = robot.getTCP().position.clone();
-        const dist = startPos.distanceTo(pos);
-        if (dist < 1e-3) return null;
         const list = [from.slice()];
         let prev = from.slice();
         // 原地先把喷枪转到作业方向，避免边走边翻转腕部扫到墙面
@@ -1663,14 +1771,21 @@
           list.push(pre.angles.slice());
           prev = pre.angles.slice();
         }
-        const n = Math.max(3, Math.ceil(dist / 0.07));
-        for (let k = 1; k <= n; k++) {
-          const p = startPos.clone().lerp(pos, k / n);
-          const sol = robot.solveIK(p, dir, prev, branch);
-          if (!sol || !sol.reachable) return null;
-          if (!this.jointLineClear(prev, sol.angles, 4)) return null;
-          list.push(sol.angles.slice());
-          prev = sol.angles.slice();
+        let cur = startPos;
+        for (let i = 0; i < waypoints.length; i++) {
+          const end = waypoints[i];
+          const dist = cur.distanceTo(end);
+          if (dist < 0.02) continue;
+          const n = Math.max(3, Math.ceil(dist / 0.07));
+          for (let k = 1; k <= n; k++) {
+            const p = cur.clone().lerp(end, k / n);
+            const sol = robot.solveIK(p, dir, prev, branch);
+            if (!sol || !sol.reachable) return null;
+            if (!this.jointLineClear(prev, sol.angles, 4)) return null;
+            list.push(sol.angles.slice());
+            prev = sol.angles.slice();
+          }
+          cur = end.clone();
         }
         if (!this.jointLineClear(prev, to, 8)) return null;
         list.push(to.slice());
@@ -1685,9 +1800,11 @@
         }
         return segments.length ? segments : null;
       };
-      for (let i = 0; i < branches.length; i++) {
-        const segs = tryBranch(branches[i]);
-        if (segs) { robot.setJoints(from); return segs; }
+      for (let r = 0; r < routes.length; r++) {
+        for (let i = 0; i < branches.length; i++) {
+          const segs = tryRoute(routes[r], branches[i]);
+          if (segs) { robot.setJoints(from); return segs; }
+        }
       }
       robot.setJoints(from);
       return null;
@@ -1888,6 +2005,44 @@
         ? away.normalize()
         : (this.pathDir || new THREE.Vector3(0, 0, -1)).clone().normalize();
       const branches = this.pathBranch ? [this.pathBranch, -this.pathBranch] : [1, -1];
+      // 把机械臂先沿安全路径退到停车位，再折叠
+      const runSegments = (segs, lastAngles) => {
+        const step = (i) => {
+          if (i >= segs.length) {
+            this.startFoldMotion(lastAngles, home, done);
+            return;
+          }
+          this.startFoldMotion(segs[i].from, segs[i].to, () => step(i + 1));
+        };
+        step(0);
+      };
+      // 天花板/地面贴墙作业结束时，先朝房间中心退到停车位，
+      // 避免机械臂收拢时肘部折向相邻墙面
+      const toCenter = new THREE.Vector3(-tcp.position.x, 0, -tcp.position.z);
+      if (toCenter.lengthSq() > 0.04) {
+        toCenter.normalize();
+        const parkDists = [0.8, 1.1, 0.6];
+        for (let i = 0; i < parkDists.length; i++) {
+          const park = tcp.position.clone().addScaledVector(toCenter, parkDists[i]);
+          for (let b = 0; b < branches.length; b++) {
+            const sol = robot.solveIK(park, tcp.direction, from, branches[b]);
+            if (!sol || !sol.reachable) continue;
+            if (!this.foldLineClear(sol.angles, home, 30)) continue;
+            robot.setJoints(from);
+            if (this.foldLineClear(from, sol.angles, 30)) {
+              this.startFoldMotion(from, sol.angles, () => this.startFoldMotion(sol.angles, home, done));
+              return;
+            }
+            // 关节直线到停车位不安全时，用 TCP 直线逐点退让
+            const segs = this.cartesianApproach(from, sol.angles, park, tcp.direction, branches[b]);
+            if (segs && segs.length) {
+              robot.setJoints(from);
+              runSegments(segs, sol.angles);
+              return;
+            }
+          }
+        }
+      }
       const retracts = [0.4, 0.65, 0.9, 1.15];
       for (let i = 0; i < retracts.length; i++) {
         const viaPos = tcp.position.clone().addScaledVector(dir, -retracts[i]);
