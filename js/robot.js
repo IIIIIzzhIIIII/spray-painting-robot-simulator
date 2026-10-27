@@ -447,15 +447,25 @@
     }
   };
   RobotRig.prototype.computeHomeJoints = function () {
-    const target = new THREE.Vector3(this.basePos.x + 0.4, 1.45, this.basePos.z - 1.15);
-    const sol = this.solveIK(target, new THREE.Vector3(0, 0, -1));
+    // 目标点按底盘当前朝向转换到世界坐标，侧墙作业时也保持在机器人正前方
+    const yaw = this.baseYaw;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    const target = new THREE.Vector3(
+      this.basePos.x + fx * 1.15 + rx * -0.4,
+      1.45,
+      this.basePos.z + fz * 1.15 + rz * -0.4
+    );
+    const sol = this.solveIK(target, new THREE.Vector3(fx, 0, fz));
     if (sol && sol.angles.every((v) => isFinite(v))) return sol.angles;
     return [0, -35, 70, 0, -35, 0];
   };
 
   // 转运姿态：机械臂收拢在设备前方，避免从机柜顶部翻越造成穿模
   RobotRig.prototype.computeTransportJoints = function () {
-    const target = new THREE.Vector3(this.basePos.x, 1.4, this.basePos.z - 0.9);
+    const yaw = this.baseYaw;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const target = new THREE.Vector3(this.basePos.x + fx * 0.9, 1.4, this.basePos.z + fz * 0.9);
     const sol = this.solveIK(target, new THREE.Vector3(0, -1, 0), this.currentJoints);
     if (sol && sol.angles.every((v) => isFinite(v))) return sol.angles;
     return this.computeHomeJoints();

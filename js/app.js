@@ -32,6 +32,7 @@
     pathBase: null,
     pathRoute: null,
     resumeState: null,
+    roomTask: null,
     selection: null,
     selectionMode: false,
     drag: null,
@@ -330,6 +331,7 @@
       on('btnSelectArea', 'click', () => this.toggleSelectionMode());
       on('btnGenPath', 'click', () => this.buildPath());
       on('btnRunPath', 'click', () => this.startPathRun());
+      on('btnRoomSpray', 'click', () => this.startRoomSpray());
       on('btnResumePath', 'click', () => this.resumePathRun());
 
       const viewSwitch = $('viewSwitch');
@@ -770,6 +772,8 @@
       this.jobIndex = 0;
       this.jobOffset = 0;
       this.taskTotalLength = 0;
+      this.roomTask = null;
+      this._roomMode = false;
       this.spray.setSurface(kind);
       this.spray.setTargetRect(null, kind);
       this.scene.setView(kind);
@@ -810,6 +814,8 @@
       this.jobIndex = 0;
       this.jobOffset = 0;
       this.taskTotalLength = 0;
+      this.roomTask = null;
+      this._roomMode = false;
       this.baseDrive = null;
       this.clearResume();
       this.spray.rebuild();
@@ -929,6 +935,8 @@
       const ok = await ui.confirm('恢复初始状态', '将停止所有动作，并清除涂层、选区、路径、示教点与工艺参数。是否继续？', true);
       if (!ok) return;
       this.stopAll();
+      this.roomTask = null;
+      this._roomMode = false;
       this.selectionMode = false;
       ui.setSelectionActive(false);
       this.scene.controls.enabled = true;
@@ -1068,6 +1076,12 @@
       if (U.isMobile()) ui.setMobileView('motion');
     },
     baseYawFor(x, z, surface, cu, cv) {
+      if (!C.isWallSurface(surface)) {
+        // 天花板/地面：底盘朝向房间中心，避免转运时机械臂伸向最近的墙面
+        const d = Math.hypot(x, z);
+        if (d < 0.25) return C.robot.yawOffset;
+        return Math.atan2(-x, -z);
+      }
       const p = this.scene.surfacePoint(surface, cu, cv, 0);
       const dx = p.x - x, dz = p.z - z;
       if (Math.hypot(dx, dz) < 0.15) return C.robot.yawOffset;
@@ -1154,23 +1168,35 @@
       return len;
     },
 
-    // 大选区按墙面长度方向拆分为多个可作业分区
+    // 大选区拆分为多个可作业分区（墙面沿长度方向；天花板/地面同时按两个方向拆分）
     splitPanels(surface, sel, maxSpan) {
       const f = C.surfaceFrame(surface);
-      const span = sel.maxX - sel.minX;
-      const n = Math.max(1, Math.ceil((span - 0.02) / maxSpan));
-      if (n <= 1) return [sel];
-      const overlap = Math.min(0.18, (span / n) * 0.12);
+      const spanU = sel.maxX - sel.minX;
+      const spanV = sel.maxY - sel.minY;
+      const nU = Math.max(1, Math.ceil((spanU - 0.02) / maxSpan));
+      const nV = f.isWall ? 1 : Math.max(1, Math.ceil((spanV - 0.02) / maxSpan));
+      if (nU <= 1 && nV <= 1) return [sel];
+      const ovU = Math.min(0.18, (spanU / nU) * 0.12);
+      const ovV = Math.min(0.18, (spanV / nV) * 0.12);
       const panels = [];
-      for (let i = 0; i < n; i++) {
-        let u0 = sel.minX + span * i / n;
-        let u1 = sel.minX + span * (i + 1) / n;
-        if (i > 0) u0 -= overlap;
-        if (i < n - 1) u1 += overlap;
-        u0 = U.clamp(u0, -f.width / 2 + 0.03, f.width / 2 - 0.03);
-        u1 = U.clamp(u1, -f.width / 2 + 0.03, f.width / 2 - 0.03);
-        if (u1 - u0 < 0.2) continue;
-        panels.push({ surface: surface, minX: u0, maxX: u1, minY: sel.minY, maxY: sel.maxY });
+      for (let j = 0; j < nV; j++) {
+        let v0 = sel.minY + spanV * j / nV;
+        let v1 = sel.minY + spanV * (j + 1) / nV;
+        if (j > 0) v0 -= ovV;
+        if (j < nV - 1) v1 += ovV;
+        v0 = U.clamp(v0, f.vMin + 0.03, f.vMax - 0.03);
+        v1 = U.clamp(v1, f.vMin + 0.03, f.vMax - 0.03);
+        if (v1 - v0 < 0.2) continue;
+        for (let i = 0; i < nU; i++) {
+          let u0 = sel.minX + spanU * i / nU;
+          let u1 = sel.minX + spanU * (i + 1) / nU;
+          if (i > 0) u0 -= ovU;
+          if (i < nU - 1) u1 += ovU;
+          u0 = U.clamp(u0, -f.width / 2 + 0.03, f.width / 2 - 0.03);
+          u1 = U.clamp(u1, -f.width / 2 + 0.03, f.width / 2 - 0.03);
+          if (u1 - u0 < 0.2) continue;
+          panels.push({ surface: surface, minX: u0, maxX: u1, minY: v0, maxY: v1 });
+        }
       }
       return panels.length ? panels : [sel];
     },
@@ -1230,7 +1256,9 @@
       } else {
         // 选区超出单点作业范围时，沿墙面长度方向分成多个分区，
         // 每个分区由底盘重新定位后再用机械臂全伸喷涂
-        const maxSpan = C.isWallSurface(surface) ? 2.6 : 2.4;
+        const maxSpan = C.isWallSurface(surface)
+          ? (this._roomMode ? 1.6 : 2.6)
+          : (this._roomMode ? 2.0 : 2.4);
         const panels = this.splitPanels(surface, sel, maxSpan);
         if (panels.length > 1) {
           let from = savedBase;
@@ -1275,9 +1303,14 @@
         ' m' + (panelized ? '，分 ' + jobs.length + ' 个分区' : ''), 'ok');
       const unreachable = jobs.reduce((s, j) => s + j.unreachable, 0);
       if (unreachable > 0) {
-        ui.toast('部分路径点超出可达范围（' + unreachable + '/' + points + '），可能影响覆盖', 'warn');
-        ui.log('路径中有 ' + unreachable + ' 个点不可完全达', 'warn');
-      } else {
+        if (this._roomMode) {
+          ui.log('全屋喷涂 · ' + this.surfaceName(surface) + ' 有 ' + unreachable +
+            ' 个路径点超出可达范围，将按最近可达位置作业', 'warn');
+        } else {
+          ui.toast('部分路径点超出可达范围（' + unreachable + '/' + points + '），可能影响覆盖', 'warn');
+          ui.log('路径中有 ' + unreachable + ' 个点不可完全达', 'warn');
+        }
+      } else if (!this._roomMode) {
         ui.toast('路径已生成，点击「开始' + (SB.Tools ? SB.Tools.current().short : '喷涂') + '」底盘将自动前往作业面', 'ok');
       }
     },
@@ -1335,6 +1368,18 @@
       }
 
       const normal = this.scene.surfaceNormal(surface);
+      if (this._roomMode && dense.length) {
+        // 全屋任务在分区中心增加引入/引出点：从舒适位姿进入与退出，
+        // 避免从房间角落或贴地位置开始/结束而引发接近碰撞
+        const leadU = (minU + maxU) / 2;
+        const leadV = sf.isWall
+          ? U.clamp(1.5, minV, maxV)
+          : U.clamp((minV + maxV) / 2 - 0.32, minV, maxV);
+        const firstPt = dense[0];
+        if (Math.hypot(firstPt.u - leadU, firstPt.v - leadV) > 0.12) dense.unshift({ u: leadU, v: leadV });
+        const lastPt = dense[dense.length - 1];
+        if (Math.hypot(lastPt.u - leadU, lastPt.v - leadV) > 0.12) dense.push({ u: leadU, v: leadV });
+      }
       let candidates = this.baseCandidates(surface, sel);
       if (!candidates.length) candidates = [{ x: fromBase.x, z: fromBase.z, yaw: fromBase.yaw }];
       const jointJump = (a, b) => {
@@ -1445,6 +1490,11 @@
 
     clearPlanning(clearSelection) {
       const ui = SB.UI;
+      if (this.roomTask) {
+        this.roomTask = null;
+        this._roomMode = false;
+        ui.log('全屋喷涂任务已终止', 'warn');
+      }
       if (this.baseDrive) {
         this.baseDrive = null;
       }
@@ -1555,6 +1605,112 @@
       return direct;
     },
 
+    // 全屋喷涂：依次完成后墙、左墙、右墙、前墙、天花板
+    roomSelection(surface) {
+      const f = C.surfaceFrame(surface);
+      if (f.isWall) {
+        return { surface: surface, minX: -f.width / 2 + 0.12, maxX: f.width / 2 - 0.12, minY: 0.12, maxY: f.height - 0.12 };
+      }
+      return { surface: surface, minX: -f.width / 2 + 0.15, maxX: f.width / 2 - 0.15, minY: f.vMin + 0.15, maxY: f.vMax - 0.15 };
+    },
+
+    startRoomSpray() {
+      const ui = SB.UI;
+      if (this.isLocked() || this.isBusy()) {
+        ui.toast('作业进行中，请先停止后再开始全屋喷涂', 'warn');
+        return;
+      }
+      if (SB.Tools && SB.Tools.active !== 'spray') {
+        SB.Tools.setActive('spray', true);
+        ui.log('全屋喷涂已切换为喷涂枪', 'info');
+      }
+      if (this.toolUsesMaterial() && this.spray.tank <= 1) {
+        ui.toast('料桶余量不足，请先补充涂料', 'warn');
+        return;
+      }
+      this.setSpray(false, true);
+      this.clearPlanning(true);
+      this.roomTask = {
+        surfaces: C.wallOrder.concat(['ceiling']),
+        index: -1, done: [], totalArea: 0, totalTarget: 0
+      };
+      this.taskTime = 0;
+      ui.setTimer(0);
+      ui.setInterlock(true, '全屋喷涂进行中');
+      ui.log('全屋喷涂任务开始：后墙 → 左墙 → 右墙 → 前墙 → 天花板', 'ok');
+      ui.toast('全屋喷涂开始，机器人将依次完成四面墙与天花板', 'ok');
+      this.advanceRoomSurface();
+    },
+
+    advanceRoomSurface() {
+      const ui = SB.UI;
+      const task = this.roomTask;
+      if (!task) return;
+      task.index++;
+      if (task.index >= task.surfaces.length) {
+        this.finishRoomTask();
+        return;
+      }
+      const surface = task.surfaces[task.index];
+      const sel = this.roomSelection(surface);
+      this.surface = surface;
+      this.scene.surface = surface;
+      this.spray.setSurface(surface);
+      this.spray.setTargetRect(sel, surface);
+      this.selection = sel;
+      this.scene.setSelection(sel, surface);
+      this.setSurfaceUI(surface);
+      this.scene.setView(surface, true);
+      ui.setStatus('moving', '全屋喷涂 · ' + this.surfaceName(surface));
+      ui.setSelectInfo('全屋喷涂 · 规划' + this.surfaceName(surface) + '路径…');
+      ui.setInterlock(true, '全屋喷涂进行中');
+      ui.log('全屋喷涂 · 开始' + this.surfaceName(surface), 'info');
+      this._roomMode = true;
+      this.buildPath();
+      this._roomMode = false;
+      if (!this.path || !this.pathJobs || !this.pathJobs.length) {
+        ui.log('全屋喷涂 · ' + this.surfaceName(surface) + ' 无有效路径，跳过', 'warn');
+        this.advanceRoomSurface();
+        return;
+      }
+      this.pathJobs.forEach((j) => { j.roomTarget = sel; });
+      this.startPathRun();
+    },
+
+    finishRoomTask() {
+      const ui = SB.UI;
+      const task = this.roomTask;
+      this.roomTask = null;
+      this._roomMode = false;
+      this.pathRun = null;
+      this.baseDrive = null;
+      this.setSpray(false, true);
+      this.state = 'ready';
+      ui.setStatus('ready', '全屋喷涂完成');
+      ui.setInterlock(false);
+      ui.setPathButtons({ hasPath: false, hasSelection: false, running: false });
+      ui.syncJoints(this.robot.getJoints());
+      const cov = task && task.totalTarget > 0 ? U.clamp((task.totalArea / task.totalTarget) * 100, 0, 100) : 0;
+      ui.setSelectInfo('全屋喷涂完成 · 综合覆盖率 ' + cov.toFixed(1) + '%');
+      ui.log('全屋喷涂完成 · ' + (task ? task.done.length : 0) + ' 个作业面 · 综合覆盖 ' + cov.toFixed(1) + '%', 'ok');
+      ui.toast('全屋喷涂完成', 'ok');
+      this.clearResume();
+      this.selection = null;
+      this.path = null;
+      this.pathCum = null;
+      this.pathDir = null;
+      this.pathBase = null;
+      this.pathRoute = null;
+      this.pathJointDur = null;
+      this.pathJobs = null;
+      this.pathLength = 0;
+      this.jobIndex = 0;
+      this.jobOffset = 0;
+      this.taskTotalLength = 0;
+      this.scene.clearPlanning(true);
+      this.spray.setTargetRect(null, this.surface);
+    },
+
     startAutoSpray() {
       const ui = SB.UI;
       if (this.isLocked() || this.isBusy()) return;
@@ -1585,8 +1741,12 @@
       this.setSpray(false, true);
       this.scene.setFollow(true, true);
       this.clearResume();
-      this.taskTime = 0;
-      ui.setTimer(0);
+      if (!this.roomTask) {
+        this.taskTime = 0;
+        ui.setTimer(0);
+      } else {
+        ui.setTimer(this.taskTime);
+      }
       this.state = 'moving';
       ui.setStatus('moving', '自动作业准备中');
       ui.setInterlock(true, '自动作业进行中');
@@ -1633,8 +1793,12 @@
         return;
       }
       // 先沿喷枪方向退离作业面，再折叠；避免关节直线插值扫过墙面
-      const dir = (this.pathDir || new THREE.Vector3(0, 0, -1)).clone().normalize();
       const tcp = robot.getTCP();
+      const baseNow = robot.getBasePose();
+      const away = new THREE.Vector3(tcp.position.x - baseNow.x, 0, tcp.position.z - baseNow.z);
+      const dir = away.lengthSq() > 0.04
+        ? away.normalize()
+        : (this.pathDir || new THREE.Vector3(0, 0, -1)).clone().normalize();
       const branches = this.pathBranch ? [this.pathBranch, -this.pathBranch] : [1, -1];
       const retracts = [0.4, 0.65, 0.9, 1.15];
       for (let i = 0; i < retracts.length; i++) {
@@ -1873,6 +2037,30 @@
 
     finishPathRun(aborted, reason) {
       if (!this.pathRun) return;
+      if (!aborted && this.roomTask) {
+        const task = this.roomTask;
+        const name = this.surfaceName(this.surface);
+        task.done.push({
+          surface: this.surface, name: name,
+          area: this.spray.area, target: this.spray.targetArea,
+          coverage: this.spray.coverage
+        });
+        task.totalArea += this.spray.area;
+        task.totalTarget += this.spray.targetArea;
+        this.pathRun = null;
+        this.setSpray(false, true);
+        this.state = 'moving';
+        SB.UI.setStatus('moving', '全屋喷涂 · ' + name + '完成');
+        SB.UI.setSelectInfo('全屋喷涂 · ' + name + ' 完成 · 前往下一作业面');
+        SB.UI.setInterlock(true, '全屋喷涂进行中');
+        SB.UI.log('全屋喷涂 · ' + name + ' 完成 · 覆盖 ' + this.spray.coverage.toFixed(1) + '%', 'ok');
+        if (task.index >= task.surfaces.length - 1) {
+          this.finishRoomTask();
+          return;
+        }
+        this.foldToTransport(() => this.advanceRoomSurface());
+        return;
+      }
       const saved = aborted ? this.captureResumeState(reason) : false;
       this.pathRun = null;
       const ui = SB.UI;
@@ -1937,7 +2125,14 @@
         params: U.clone(this.params),
         materialId: this.materialId,
         toolId: SB.Tools ? SB.Tools.active : 'spray',
-        taskTime: this.taskTime || 0
+        taskTime: this.taskTime || 0,
+        roomTask: this.roomTask ? {
+          surfaces: this.roomTask.surfaces.slice(),
+          index: this.roomTask.index,
+          done: this.roomTask.done.map((d) => Object.assign({}, d)),
+          totalArea: this.roomTask.totalArea,
+          totalTarget: this.roomTask.totalTarget
+        } : null
       };
       SB.UI.setResumeAvailable(true, this.resumeState);
       return true;
@@ -1980,6 +2175,13 @@
       if (this.pathJobs && this.pathJobs[this.jobIndex]) this.applyJob(this.jobIndex);
       else this.jobOffset = rs.jobOffset || 0;
       this.taskTime = rs.taskTime || 0;
+      this.roomTask = rs.roomTask ? {
+        surfaces: rs.roomTask.surfaces.slice(),
+        index: rs.roomTask.index,
+        done: rs.roomTask.done.map((d) => Object.assign({}, d)),
+        totalArea: rs.roomTask.totalArea,
+        totalTarget: rs.roomTask.totalTarget
+      } : null;
       this.setSurfaceUI(this.surface);
       if (this.selection) this.scene.setSelection(this.selection, this.surface);
       this.scene.showPaths(this.pathJobs ? this.pathJobs.map((j) => j.path) : [this.path]);
@@ -2191,6 +2393,11 @@
     },
     stopAll() {
       if (this.pathRun) this.captureResumeState('急停/故障');
+      if (!this.pathRun && this.roomTask) {
+        this.roomTask = null;
+        this._roomMode = false;
+        SB.UI.log('全屋喷涂任务已终止', 'warn');
+      }
       this.motion = null;
       this.pathRun = null;
       this.baseDrive = null;
