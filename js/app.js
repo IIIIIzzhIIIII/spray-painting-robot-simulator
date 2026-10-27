@@ -1326,13 +1326,28 @@
       const overshoot = Math.min(0.04, fan * 0.12);
       const sf = C.surfaceFrame(surface);
       const halfU = sf.width / 2;
-      const vLimit = { min: sf.vMin + 0.08, max: sf.vMax - 0.08 };
-      let minU = U.clamp(sel.minX - overshoot, -halfU + 0.02, halfU - 0.02);
-      let maxU = U.clamp(sel.maxX + overshoot, -halfU + 0.02, halfU - 0.02);
+      // 拐角安全距离：喷枪垂直作业面时，腕部沿喷枪方向回缩，横向位置与 TCP 相同。
+      // 路径若贴到相邻墙面 3cm 内，运行时会被判定擦墙并停机，因此边缘必须留出腕部余量，
+      // 边缘未覆盖的窄条由扇形雾化半径自然补齐。
+      const edgeU = U.clamp(fan * 0.42, 0.10, 0.14);
+      const edgeV = sf.isWall ? 0.08 : U.clamp(fan * 0.42, 0.10, 0.14);
+      const uMin = -halfU + Math.max(0.02, edgeU);
+      const uMax = halfU - Math.max(0.02, edgeU);
+      const vLimit = { min: sf.vMin + Math.max(0.08, edgeV), max: sf.vMax - Math.max(0.08, edgeV) };
+      let minU = U.clamp(sel.minX - overshoot, uMin, uMax);
+      let maxU = U.clamp(sel.maxX + overshoot, uMin, uMax);
       let minV = U.clamp(sel.minY - overshoot, vLimit.min, vLimit.max);
       let maxV = U.clamp(sel.maxY + overshoot, vLimit.min, vLimit.max);
-      if (maxU - minU < 0.12) { minU = sel.minX; maxU = sel.maxX; }
-      if (maxV - minV < 0.12) { minV = sel.minY; maxV = sel.maxY; }
+      if (maxU - minU < 0.12) {
+        const c = U.clamp((sel.minX + sel.maxX) / 2, uMin, uMax);
+        minU = Math.max(uMin, c - 0.06);
+        maxU = Math.min(uMax, c + 0.06);
+      }
+      if (maxV - minV < 0.12) {
+        const c = U.clamp((sel.minY + sel.maxY) / 2, vLimit.min, vLimit.max);
+        minV = Math.max(vLimit.min, c - 0.06);
+        maxV = Math.min(vLimit.max, c + 0.06);
+      }
       const distance = U.clamp(p.distance || 0.3, 0.14, 0.65);
       const rowCount = Math.max(1, Math.ceil((maxV - minV) / gap) + 1);
       const corners = [];
@@ -1368,17 +1383,40 @@
       }
 
       const normal = this.scene.surfaceNormal(surface);
-      if (this._roomMode && dense.length) {
-        // 全屋任务在分区中心增加引入/引出点：从舒适位姿进入与退出，
-        // 避免从房间角落或贴地位置开始/结束而引发接近碰撞
+      if (dense.length) {
+        // 在分区中心增加引入/引出点：从舒适位姿进入与退出，
+        // 避免从房间角落或贴地位置开始/结束而引发接近或折叠碰撞（拐角尤其明显）。
+        // 连接段按小步长加密，避免关节长距离插值让 TCP 在拐角处弯向墙面。
+        const pushSegment = (arr, to) => {
+          const from = arr[arr.length - 1];
+          const len = Math.hypot(to.u - from.u, to.v - from.v);
+          if (len < 1e-6) return;
+          const n = Math.max(1, Math.ceil(len / 0.04));
+          for (let k = 1; k <= n; k++) {
+            arr.push({ u: U.lerp(from.u, to.u, k / n), v: U.lerp(from.v, to.v, k / n) });
+          }
+        };
         const leadU = (minU + maxU) / 2;
         const leadV = sf.isWall
           ? U.clamp(1.5, minV, maxV)
           : U.clamp((minV + maxV) / 2 - 0.32, minV, maxV);
-        const firstPt = dense[0];
-        if (Math.hypot(firstPt.u - leadU, firstPt.v - leadV) > 0.12) dense.unshift({ u: leadU, v: leadV });
-        const lastPt = dense[dense.length - 1];
-        if (Math.hypot(lastPt.u - leadU, lastPt.v - leadV) > 0.12) dense.push({ u: leadU, v: leadV });
+        const lead = { u: leadU, v: leadV };
+        const first = dense[0];
+        if (Math.hypot(first.u - lead.u, first.v - lead.v) > 0.12) {
+          const entry = [lead];
+          if (Math.abs(first.u - lead.u) > 0.05) pushSegment(entry, { u: first.u, v: lead.v });
+          pushSegment(entry, { u: first.u, v: first.v });
+          entry.pop();
+          dense.unshift(...entry);
+        }
+        const last = dense[dense.length - 1];
+        if (Math.hypot(last.u - lead.u, last.v - lead.v) > 0.12) {
+          const exit = [{ u: last.u, v: last.v }];
+          if (Math.abs(last.u - lead.u) > 0.05) pushSegment(exit, { u: last.u, v: lead.v });
+          pushSegment(exit, lead);
+          exit.shift();
+          dense.push(...exit);
+        }
       }
       let candidates = this.baseCandidates(surface, sel);
       if (!candidates.length) candidates = [{ x: fromBase.x, z: fromBase.z, yaw: fromBase.yaw }];
@@ -1585,6 +1623,9 @@
         const found = tryVia(pos.clone().addScaledVector(dir, -retracts[i]));
         if (found) return found;
       }
+      // 关节插值会在拐角/天花板处甩向墙面，改用 TCP 直线逐步逆解接近
+      const cart = this.cartesianApproach(from, to, pos, dir);
+      if (cart) return cart;
       // 退让仍无法避障时，经房间中部的高位中转点绕行
       const R = C.room;
       const base = this.robot.getBasePose();
@@ -1603,6 +1644,53 @@
       }
       this.robot.setJoints(from);
       return direct;
+    },
+
+    // TCP 直线接近：先原地调整喷枪朝向，再沿直线逐点逆解，避免关节插值在拐角处甩向墙面
+    cartesianApproach(from, to, pos, dir) {
+      const robot = this.robot;
+      const branches = this.pathBranch ? [this.pathBranch, -this.pathBranch] : [1, -1];
+      const tryBranch = (branch) => {
+        robot.setJoints(from);
+        const startPos = robot.getTCP().position.clone();
+        const dist = startPos.distanceTo(pos);
+        if (dist < 1e-3) return null;
+        const list = [from.slice()];
+        let prev = from.slice();
+        // 原地先把喷枪转到作业方向，避免边走边翻转腕部扫到墙面
+        const pre = robot.solveIK(startPos, dir, from, branch);
+        if (pre && pre.reachable && this.jointLineClear(from, pre.angles, 10)) {
+          list.push(pre.angles.slice());
+          prev = pre.angles.slice();
+        }
+        const n = Math.max(3, Math.ceil(dist / 0.07));
+        for (let k = 1; k <= n; k++) {
+          const p = startPos.clone().lerp(pos, k / n);
+          const sol = robot.solveIK(p, dir, prev, branch);
+          if (!sol || !sol.reachable) return null;
+          if (!this.jointLineClear(prev, sol.angles, 4)) return null;
+          list.push(sol.angles.slice());
+          prev = sol.angles.slice();
+        }
+        if (!this.jointLineClear(prev, to, 8)) return null;
+        list.push(to.slice());
+        const segments = [];
+        let a = from.slice();
+        for (let i = 1; i < list.length; i++) {
+          let max = 0;
+          for (let k = 0; k < 6; k++) max = Math.max(max, Math.abs(U.norm180(list[i][k] - a[k])));
+          if (max < 0.4) continue;
+          segments.push({ from: a.slice(), to: list[i].slice() });
+          a = list[i].slice();
+        }
+        return segments.length ? segments : null;
+      };
+      for (let i = 0; i < branches.length; i++) {
+        const segs = tryBranch(branches[i]);
+        if (segs) { robot.setJoints(from); return segs; }
+      }
+      robot.setJoints(from);
+      return null;
     },
 
     // 全屋喷涂：依次完成后墙、左墙、右墙、前墙、天花板
