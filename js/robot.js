@@ -38,6 +38,11 @@
       yellow: new THREE.MeshStandardMaterial({ color: 0xffcc00, metalness: 0.25, roughness: 0.42 }),
       rubber: new THREE.MeshStandardMaterial({ color: 0x171b22, metalness: 0.05, roughness: 0.92 }),
       white: new THREE.MeshStandardMaterial({ color: 0xe9eef4, metalness: 0.15, roughness: 0.5 }),
+      bodyBlue: new THREE.MeshStandardMaterial({ color: 0x3d9fdd, metalness: 0.28, roughness: 0.42 }),
+      bodyBlueDark: new THREE.MeshStandardMaterial({ color: 0x1f7cb8, metalness: 0.34, roughness: 0.40 }),
+      silver: new THREE.MeshStandardMaterial({ color: 0xd9e0e8, metalness: 0.45, roughness: 0.36 }),
+      violet: new THREE.MeshStandardMaterial({ color: 0x8b7bd6, metalness: 0.35, roughness: 0.38 }),
+      red: new THREE.MeshStandardMaterial({ color: 0xd23c2f, metalness: 0.2, roughness: 0.55 }),
       glass: new THREE.MeshPhysicalMaterial({ color: 0xcbe7f7, metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.42 }),
       led: new THREE.MeshStandardMaterial({ color: 0x22d37a, emissive: 0x22d37a, emissiveIntensity: 2.0 }),
       orange: new THREE.MeshStandardMaterial({ color: 0xff8a1e, metalness: 0.2, roughness: 0.45 })
@@ -94,55 +99,72 @@
     this.chassisGroup.name = 'Chassis';
     this.root.add(this.chassisGroup);
 
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.14, 0.34, 0.82), M.blue, 'chassis', [0, 0.38, 0]);
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.18, 0.15, 0.86), M.dark, 'chassis', [0, 0.18, 0]);
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.2, 0.06, 0.88), M.blueDark, 'chassis', [0, 0.58, 0]);
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.16, 0.05, 0.84), M.dark, 'chassis', [0, 0.62, 0]);
+    /* 低矮型蓝色 AGV 底盘：前后方向为 +z，车身纵向布置 */
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.90, 0.07, 1.24), M.dark, 'chassis', [0, 0.135, 0]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.92, 0.24, 1.26), M.bodyBlue, 'chassis', [0, 0.29, 0]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.94, 0.05, 1.28), M.bodyBlueDark, 'chassis', [0, 0.17, 0]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.98, 0.035, 1.32), M.steel, 'chassis', [0, 0.425, 0]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.90, 0.026, 1.22), M.silver, 'chassis', [0, 0.452, -0.02]);
 
-    const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.11, 24);
-    [[-0.55, -0.31], [0.55, -0.31], [-0.55, 0.31], [0.55, 0.31]].forEach(([x, z]) => {
-      this.addMesh(this.chassisGroup, wheelGeo, M.rubber, 'chassis', [x, 0.17, z], [0, 0, Math.PI / 2]);
-      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.07, 0.07, 0.125, 16), M.steel, 'chassis', [x, 0.17, z], [0, 0, Math.PI / 2]);
+    // 中部黑色驱动轮 + 前后红色万向轮
+    const driveGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.13, 28);
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, driveGeo, M.rubber, 'chassis', [s * 0.445, 0.175, -0.10], [0, 0, Math.PI / 2]);
+      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.085, 0.085, 0.145, 24), M.steel, 'chassis', [s * 0.445, 0.175, -0.10], [0, 0, Math.PI / 2]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.03, 0.21, 0.13), M.dark, 'chassis', [s * 0.375, 0.175, -0.10]);
+    });
+    [[-0.34, 0.46], [0.34, 0.46], [-0.34, -0.50], [0.34, -0.50]].forEach(([x, z]) => {
+      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.09, 0.09, 0.07, 20), M.red, 'chassis', [x, 0.09, z], [0, 0, Math.PI / 2]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.05, 0.14, 0.05), M.dark, 'chassis', [x, 0.15, z]);
     });
 
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.06, 0.1, 0.07), M.yellow, 'chassis', [0, 0.22, 0.45]);
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.06, 0.1, 0.07), M.yellow, 'chassis', [0, 0.22, -0.45]);
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(1.2, 0.045, 0.9), M.blueLight, 'chassis', [0, 0.48, 0]);
-    for (let i = -1; i <= 1; i++) {
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.08, 0.16, 0.025), M.yellow, 'chassis', [i * 0.34, 0.36, 0.414]);
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.08, 0.16, 0.025), M.yellow, 'chassis', [i * 0.34, 0.36, -0.414]);
+    // 侧检修板、斜向散热格栅、螺栓
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.008, 0.11, 0.24), M.bodyBlueDark, 'chassis', [s * 0.462, 0.29, 0.15]);
+      for (let i = 0; i < 5; i++) {
+        this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.006, 0.085, 0.016), M.silver, 'chassis', [s * 0.464, 0.245, 0.44 + i * 0.040], [Math.PI / 4, 0, 0]);
+      }
+      [0.25, 0.37].forEach((z) => [0.24, 0.34].forEach((y) => {
+        this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.007, 0.007, 0.006, 8), M.dark, 'chassis', [s * 0.467, y, z], [0, 0, Math.PI / 2]);
+      }));
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.012, 0.05, 1.26), M.silver, 'chassis', [s * 0.458, 0.175, 0]);
+    });
+
+    /* 车身机柜：高柜式蓝色箱体，白色骨架，正面黑色屏幕 */
+    const cabY0 = 0.44, cabH = 1.28, cabZ = -0.36, cabD = 0.52;
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.88, cabH, cabD), M.bodyBlue, 'chassis', [0, cabY0 + cabH / 2, cabZ]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.92, 0.05, cabD + 0.04), M.silver, 'chassis', [0, cabY0 + cabH + 0.005, cabZ]);
+    [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.022, cabH, 0.022), M.silver, 'chassis', [sx * 0.442, cabY0 + cabH / 2, cabZ + sz * (cabD / 2)]);
+    }));
+    [-1, 1].forEach((s) => {
+      const fx = s * 0.443;
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.016, 0.022, cabD), M.silver, 'chassis', [fx, cabY0 + cabH - 0.018, cabZ]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.016, 0.022, cabD), M.silver, 'chassis', [fx, cabY0 + 0.018, cabZ]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.016, cabH, 0.022), M.silver, 'chassis', [fx, cabY0 + cabH / 2, cabZ + cabD / 2]);
+    });
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.006, 0.014, cabD - 0.04), M.bodyBlueDark, 'chassis', [s * 0.443, cabY0 + cabH * 0.52, cabZ]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.004, 0.012, cabD - 0.06), M.bodyBlueDark, 'chassis', [s * 0.443, cabY0 + 0.17, cabZ]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.012, 0.22, 0.024), M.dark, 'chassis', [s * 0.447, cabY0 + cabH * 0.45, cabZ + 0.19]);
+    });
+    const fz = cabZ + cabD / 2 + 0.002;
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.36, 0.30, 0.03), M.dark, 'chassis', [0.10, cabY0 + 0.98, fz]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.30, 0.24, 0.012), M.glass, 'chassis', [0.10, cabY0 + 0.99, fz + 0.014]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.024, 0.024, 0.018, 16), M.red, 'chassis', [0.175, cabY0 + 0.76, fz + 0.014], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.021, 0.021, 0.018, 16), M.white, 'chassis', [0.10, cabY0 + 0.76, fz + 0.014], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.34, 0.008, 0.012), M.bodyBlueDark, 'chassis', [0.10, cabY0 + 0.62, fz]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.012, 0.20, 0.028), M.dark, 'chassis', [0.35, cabY0 + 0.34, fz + 0.01]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.16, 0.035, 0.12), M.dark, 'chassis', [0.20, cabY0 + cabH + 0.045, cabZ - 0.10]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), M.steel, 'chassis', [-0.26, cabY0 + cabH + 0.10, cabZ - 0.14]);
+
+    /* 前立柱升降导轨（视觉结构，不新增运动轴） */
+    const railZ = cabZ + cabD / 2 + 0.012;
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.075, 1.10, 0.028), M.dark, 'chassis', [-0.33, 1.02, railZ]);
+    for (let i = 0; i < 14; i++) {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.057, 0.012, 0.014), M.steel, 'chassis', [-0.33, 0.52 + i * 0.075, railZ + 0.018]);
     }
-
-    // 料桶
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.18, 0.18, 0.56, 24), M.white, 'chassis', [0.0, 0.93, -0.3]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.185, 0.185, 0.1, 24), M.blue, 'chassis', [0.0, 1.02, -0.3]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.14, 0.18, 0.07, 24), M.steel, 'chassis', [0.0, 1.24, -0.3]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.035, 0.035, 0.12, 12), M.dark, 'chassis', [0.0, 1.29, -0.3]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.032, 0.032, 0.34, 10), M.rubber, 'chassis', [0.26, 0.82, -0.1], [0, 0, Math.PI / 2]);
-
-    // 控制面板
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.28, 0.16, 0.08), M.dark, 'chassis', [0.42, 0.52, 0.3], [-0.35, 0, 0]);
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.17, 0.09, 0.01), M.glass, 'chassis', [0.42, 0.525, 0.345], [-0.35, 0, 0]);
-    const led = this.addMesh(this.chassisGroup, new THREE.SphereGeometry(0.018, 12, 8), M.led, 'chassis', [0.51, 0.57, 0.35]);
-    led.castShadow = false;
-
-    // 激光雷达
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.08, 0.09, 0.07, 18), M.dark, 'chassis', [-0.38, 0.66, 0.26]);
-    this.addMesh(this.chassisGroup, new THREE.SphereGeometry(0.065, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.steel, 'chassis', [-0.38, 0.7, 0.26]);
-
-    // 车身标识
-    const tex = this.labelTexture('SPRAY-X1', 'WALL SPRAYING ROBOT');
-    const labelMat = new THREE.MeshBasicMaterial({ map: tex });
-    const l1 = new THREE.Mesh(new THREE.PlaneGeometry(0.48, 0.12), labelMat);
-    l1.position.set(0.581, 0.38, 0.03); l1.rotation.y = Math.PI / 2;
-    this.chassisGroup.add(l1);
-    const l2 = new THREE.Mesh(new THREE.PlaneGeometry(0.48, 0.12), labelMat);
-    l2.position.set(-0.581, 0.38, 0.03); l2.rotation.y = -Math.PI / 2;
-    this.chassisGroup.add(l2);
-
-    for (let s = -1; s <= 1; s += 2) {
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.06, 0.1, 0.66), M.steel, 'chassis', [s * 0.49, 0.18, 0]);
-    }
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.13, 0.13, 0.09), M.bodyBlue, 'chassis', [-0.33, 0.90, railZ + 0.05]);
   };
   RobotRig.prototype.buildArm = function () {
     const M = this.materials;
@@ -151,68 +173,80 @@
     this.armBase.name = 'ArmBase';
     this.root.add(this.armBase);
 
-    this.addMesh(this.armBase, new THREE.CylinderGeometry(0.3, 0.34, 0.1, 32), M.dark, 'arm', [0, 0.66, 0]);
-    this.addMesh(this.armBase, new THREE.CylinderGeometry(0.27, 0.3, 0.1, 32), M.blue, 'arm', [0, 0.73, 0]);
-    this.addMesh(this.armBase, new THREE.CylinderGeometry(0.285, 0.285, 0.028, 32), M.yellow, 'arm', [0, 0.79, 0]);
+    /* 机身前伸托板 + 白色立柱 + 蓝色回转法兰 */
+    this.addMesh(this.armBase, new THREE.BoxGeometry(0.66, 0.055, 0.50), M.bodyBlue, 'arm', [0, 0.465, 0.16]);
+    this.addMesh(this.armBase, new THREE.BoxGeometry(0.66, 0.022, 0.03), M.silver, 'arm', [0, 0.44, 0.405]);
+    this.addMesh(this.armBase, new THREE.BoxGeometry(0.34, 0.30, 0.34), M.white, 'arm', [0, 0.625, 0.02]);
+    this.addMesh(this.armBase, new THREE.BoxGeometry(0.36, 0.028, 0.36), M.steel, 'arm', [0, 0.485, 0.02]);
+    this.addMesh(this.armBase, new THREE.CylinderGeometry(0.27, 0.30, 0.10, 32), M.bodyBlue, 'arm', [0, 0.765, 0.02]);
+    this.addMesh(this.armBase, new THREE.CylinderGeometry(0.245, 0.245, 0.03, 32), M.dark, 'arm', [0, 0.822, 0.02]);
 
     const j1 = new THREE.Group(); j1.name = 'J1'; j1.position.set(0, R.baseY, 0); this.armBase.add(j1);
-    this.addMesh(j1, new THREE.CylinderGeometry(0.225, 0.25, 0.24, 28), M.blue, 'arm', [0, 0.1, 0]);
-    this.addMesh(j1, new THREE.CylinderGeometry(0.235, 0.235, 0.05, 28), M.blueDark, 'arm', [0, 0.23, 0]);
-    this.addMesh(j1, new THREE.BoxGeometry(0.3, 0.18, 0.24), M.blueDark, 'arm', [0, 0.23, 0.08]);
+    this.addMesh(j1, new THREE.CylinderGeometry(0.235, 0.25, 0.14, 32), M.bodyBlue, 'arm', [0, 0.05, 0]);
+    this.addMesh(j1, new THREE.CylinderGeometry(0.18, 0.18, 0.20, 24), M.white, 'arm', [0, 0.12, 0]);
+    [-1, 1].forEach((s) => {
+      this.addMesh(j1, new THREE.BoxGeometry(0.05, 0.20, 0.17), M.white, 'arm', [s * 0.115, 0.17, 0]);
+    });
+    this.addMesh(j1, new THREE.BoxGeometry(0.28, 0.16, 0.11), M.bodyBlueDark, 'arm', [0, 0.16, -0.10]);
 
     const j2 = new THREE.Group(); j2.name = 'J2'; j2.position.set(0, R.shoulderY, 0); j1.add(j2);
-    this.addMesh(j2, new THREE.CylinderGeometry(0.205, 0.205, 0.36, 28), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
-    this.addMesh(j2, new THREE.CylinderGeometry(0.185, 0.185, 0.38, 28), M.blue, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
-    this.addMesh(j2, new THREE.CylinderGeometry(0.12, 0.12, 0.39, 20), M.steel, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.195, 0.195, 0.34, 30), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.185, 0.185, 0.38, 30), M.bodyBlue, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.10, 0.10, 0.40, 20), M.steel, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
 
-    // 大臂
-    this.addMesh(j2, new THREE.BoxGeometry(0.175, 0.23, 0.72), M.blue, 'arm', [0, 0, 0.45]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.15, 0.2, 0.34), M.blue, 'arm', [0, 0, 0.86]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.03, 0.26, 0.58), M.dark, 'arm', [0.094, 0, 0.48]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.03, 0.26, 0.58), M.dark, 'arm', [-0.094, 0, 0.48]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.08, 0.028, 0.58), M.yellow, 'arm', [0, 0.13, 0.5]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.19, 0.05, 0.2), M.steel, 'arm', [0, 0, 0.16]);
+    // 大臂：白色主连杆、黑色侧板、银色端盖与走线管
+    this.addMesh(j2, new THREE.BoxGeometry(0.17, 0.21, 0.70), M.white, 'arm', [0, 0, 0.47]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.145, 0.175, 0.28), M.white, 'arm', [0, 0, 0.94]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.022, 0.235, 0.62), M.dark, 'arm', [0.088, 0, 0.46]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.022, 0.235, 0.62), M.dark, 'arm', [-0.088, 0, 0.46]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.08, 0.02, 0.66), M.silver, 'arm', [0, 0.112, 0.48]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.175, 0.215, 0.05), M.bodyBlue, 'arm', [0, 0, 0.20]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.018, 0.018, 0.80, 12), M.dark, 'arm', [0, -0.115, 0.50], [Math.PI / 2, 0, 0]);
 
     const j3 = new THREE.Group(); j3.name = 'J3'; j3.position.set(0, 0, L1); j2.add(j3);
     this.jointGroups.push(j1, j2, j3);
-    this.addMesh(j3, new THREE.CylinderGeometry(0.165, 0.165, 0.32, 26), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
-    this.addMesh(j3, new THREE.CylinderGeometry(0.145, 0.145, 0.34, 26), M.blue, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.165, 0.165, 0.30, 28), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.15, 0.15, 0.32, 28), M.bodyBlue, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.085, 0.085, 0.34, 20), M.steel, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
 
-    // 小臂
-    this.addMesh(j3, new THREE.BoxGeometry(0.145, 0.19, 0.7), M.blue, 'arm', [0, 0, 0.42]);
-    this.addMesh(j3, new THREE.BoxGeometry(0.12, 0.16, 0.24), M.blueDark, 'arm', [0, 0, 0.8]);
-    this.addMesh(j3, new THREE.BoxGeometry(0.025, 0.21, 0.58), M.dark, 'arm', [0.078, 0, 0.45]);
-    this.addMesh(j3, new THREE.BoxGeometry(0.025, 0.21, 0.58), M.dark, 'arm', [-0.078, 0, 0.45]);
-    this.addMesh(j3, new THREE.BoxGeometry(0.065, 0.026, 0.56), M.yellow, 'arm', [0, 0.108, 0.46]);
+    // 小臂：白色细长圆管 + 蓝色卡箍 + 走线
+    this.addMesh(j3, new THREE.CylinderGeometry(0.072, 0.078, 0.72, 24), M.white, 'arm', [0, 0, 0.45], [Math.PI / 2, 0, 0]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.082, 0.082, 0.05, 24), M.bodyBlue, 'arm', [0, 0, 0.10], [Math.PI / 2, 0, 0]);
+    this.addMesh(j3, new THREE.BoxGeometry(0.03, 0.012, 0.64), M.dark, 'arm', [0, 0.062, 0.45]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.028, 0.028, 0.64, 12), M.dark, 'arm', [0, -0.085, 0.45], [Math.PI / 2, 0, 0]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.085, 0.08, 0.06, 24), M.steel, 'arm', [0, 0, 0.83], [Math.PI / 2, 0, 0]);
 
     const j4 = new THREE.Group(); j4.name = 'J4'; j4.position.set(0, 0, L2); j3.add(j4);
-    this.addMesh(j4, new THREE.CylinderGeometry(0.125, 0.125, 0.16, 24), M.dark, 'arm', [0, 0, 0.04], [Math.PI / 2, 0, 0]);
-    this.addMesh(j4, new THREE.CylinderGeometry(0.105, 0.105, 0.17, 24), M.steel, 'arm', [0, 0, 0.04], [Math.PI / 2, 0, 0]);
-    this.addMesh(j4, new THREE.BoxGeometry(0.14, 0.14, 0.16), M.blueDark, 'arm', [0, 0, 0.1]);
+    this.addMesh(j4, new THREE.CylinderGeometry(0.12, 0.12, 0.20, 24), M.white, 'arm', [0, 0, 0.02], [Math.PI / 2, 0, 0]);
+    this.addMesh(j4, new THREE.CylinderGeometry(0.088, 0.088, 0.225, 24), M.bodyBlue, 'arm', [0, 0, 0.02], [Math.PI / 2, 0, 0]);
+    this.addMesh(j4, new THREE.BoxGeometry(0.14, 0.13, 0.10), M.white, 'arm', [0, 0, 0.11]);
 
     const j5 = new THREE.Group(); j5.name = 'J5'; j5.position.set(0, 0, 0); j4.add(j5);
-    this.addMesh(j5, new THREE.CylinderGeometry(0.105, 0.105, 0.23, 22), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
-    this.addMesh(j5, new THREE.CylinderGeometry(0.088, 0.088, 0.24, 22), M.steel, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
-    this.addMesh(j5, new THREE.BoxGeometry(0.11, 0.12, 0.13), M.blueDark, 'arm', [0, 0, 0.07]);
+    this.addMesh(j5, new THREE.CylinderGeometry(0.085, 0.085, 0.18, 22), M.bodyBlue, 'arm', [0, 0, 0.06], [0, 0, Math.PI / 2]);
+    this.addMesh(j5, new THREE.CylinderGeometry(0.055, 0.055, 0.19, 18), M.steel, 'arm', [0, 0, 0.06], [0, 0, Math.PI / 2]);
+    this.addMesh(j5, new THREE.BoxGeometry(0.11, 0.10, 0.10), M.white, 'arm', [0, 0, 0.10]);
 
     const j6 = new THREE.Group(); j6.name = 'J6'; j6.position.set(0, 0, 0.14); j5.add(j6);
     this.jointGroups.push(j4, j5, j6);
-    this.addMesh(j6, new THREE.CylinderGeometry(0.095, 0.095, 0.09, 22), M.dark, 'arm', [0, 0, 0.045], [Math.PI / 2, 0, 0]);
-    this.addMesh(j6, new THREE.CylinderGeometry(0.075, 0.075, 0.1, 20), M.orange, 'arm', [0, 0, 0.095], [Math.PI / 2, 0, 0]);
+    this.addMesh(j6, new THREE.CylinderGeometry(0.09, 0.09, 0.06, 22), M.steel, 'arm', [0, 0, 0.03], [Math.PI / 2, 0, 0]);
+    this.addMesh(j6, new THREE.BoxGeometry(0.13, 0.115, 0.14), M.white, 'arm', [0, 0, 0.10]);
+    this.addMesh(j6, new THREE.BoxGeometry(0.135, 0.02, 0.14), M.bodyBlue, 'arm', [0, 0.055, 0.10]);
 
     // 末端工具安装座（喷涂枪 / 刮刀 / 砂盘共用）
     this.toolMount = new THREE.Group();
     this.toolMount.name = 'ToolMount';
     j6.add(this.toolMount);
 
-    // 喷枪组件（单独图层）
+    // 喷枪组件（单独图层）：白色枪身 + 紫色喷嘴
     this.nozzleGroup = new THREE.Group();
     this.nozzleGroup.name = 'Tool_Spray';
     this.toolMount.add(this.nozzleGroup);
-    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.085, 0.085, 0.04, 20), M.steel, 'nozzle', [0, 0, 0.15], [Math.PI / 2, 0, 0]);
-    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.062, 0.07, 0.12, 20), M.dark, 'nozzle', [0, 0, 0.21], [Math.PI / 2, 0, 0]);
-    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.018, 0.062, 0.1, 20), M.orange, 'nozzle', [0, 0, 0.3], [Math.PI / 2, 0, 0]);
-    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.019, 0.019, 0.06, 16), M.blue, 'nozzle', [0, 0.09, 0.17], [0, 0, Math.PI / 2]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.085, 0.085, 0.03, 20), M.steel, 'nozzle', [0, 0, 0.175], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.16, 0.11, 0.12), M.white, 'nozzle', [0, 0, 0.245]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.165, 0.02, 0.12), M.violet, 'nozzle', [0, 0.058, 0.245]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.05, 0.062, 0.04, 20), M.dark, 'nozzle', [0, 0, 0.315], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.014, 0.048, 0.045, 20), M.violet, 'nozzle', [0, 0, 0.328], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.02, 0.02, 0.06, 12), M.bodyBlue, 'nozzle', [0, 0.072, 0.215], [0, 0, Math.PI / 2]);
 
     this.tcp = new THREE.Object3D();
     this.tcp.name = 'TCP';
