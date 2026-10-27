@@ -346,7 +346,9 @@
             return;
           }
           this.setNozzleView(false);
-          this.scene.setView(btn.dataset.view);
+          let view = btn.dataset.view;
+          if (view === 'wall' && C.isWallSurface(this.surface)) view = this.surface;
+          this.scene.setView(view);
         });
       }
       const toolSwitch = $('toolSwitch');
@@ -462,8 +464,18 @@
       const pose = C.poses.filter((p) => p.id === id)[0];
       if (!pose) return;
       const target = pose.target.slice();
+      let dir = pose.direction.slice();
       if (pose.id === 'wall') {
-        target[2] = C.room.wallZ + 0.34;
+        if (C.isWallSurface(this.surface)) {
+          const f = C.surfaceFrame(this.surface);
+          const c = this.scene.surfacePoint(this.surface, 0, 1.55, 0);
+          target[0] = c.x + f.normal[0] * 0.34;
+          target[1] = 1.55;
+          target[2] = c.z + f.normal[2] * 0.34;
+          dir = [-f.normal[0], -f.normal[1], -f.normal[2]];
+        } else {
+          target[2] = C.room.wallZ + 0.34;
+        }
       } else if (pose.id === 'ceiling') {
         target[1] = C.room.height - 0.34;
       } else if (pose.id === 'home') {
@@ -478,7 +490,7 @@
       }
       const sol = this.robot.solveIK(
         new THREE.Vector3(target[0], target[1], target[2]),
-        new THREE.Vector3(pose.direction[0], pose.direction[1], pose.direction[2]),
+        new THREE.Vector3(dir[0], dir[1], dir[2]),
         this.robot.getJoints()
       );
       if (!sol) { ui.toast('该姿态无逆解', 'error'); return; }
@@ -721,7 +733,9 @@
     },
 
     surfaceName(s) {
-      return s === 'ceiling' ? '天花板' : s === 'floor' ? '地面' : '墙面';
+      if (s === 'ceiling') return '天花板';
+      if (s === 'floor') return '地面';
+      return C.wallNames[s] || '墙面';
     },
 
     emptySelectionText() {
@@ -752,9 +766,13 @@
       this.pathJointDur = null;
       this.pathBase = null;
       this.pathRoute = null;
+      this.pathJobs = null;
+      this.jobIndex = 0;
+      this.jobOffset = 0;
+      this.taskTotalLength = 0;
       this.spray.setSurface(kind);
       this.spray.setTargetRect(null, kind);
-      this.scene.setView(kind === 'wall' ? 'wall' : kind);
+      this.scene.setView(kind);
       this.setSurfaceUI(kind);
       ui.setPathButtons({ hasPath: false, hasSelection: false, running: false });
       ui.setSelectInfo(this.emptySelectionText());
@@ -788,6 +806,10 @@
       this.pathJointDur = null;
       this.pathBase = null;
       this.pathRoute = null;
+      this.pathJobs = null;
+      this.jobIndex = 0;
+      this.jobOffset = 0;
+      this.taskTotalLength = 0;
       this.baseDrive = null;
       this.clearResume();
       this.spray.rebuild();
@@ -1035,6 +1057,10 @@
       this.path = null;
       this.pathCum = null;
       this.pathLength = 0;
+      this.pathJobs = null;
+      this.jobIndex = 0;
+      this.jobOffset = 0;
+      this.taskTotalLength = 0;
       this.scene.clearPlanning(false);
       ui.setPathButtons({ hasPath: false, hasSelection: true, running: false });
       ui.setSelectInfo(this.selectionInfo());
@@ -1042,10 +1068,8 @@
       if (U.isMobile()) ui.setMobileView('motion');
     },
     baseYawFor(x, z, surface, cu, cv) {
-      if (surface === 'wall') {
-        return Math.atan2(cu - x, C.room.wallZ - z);
-      }
-      const dx = cu - x, dz = cv - z;
+      const p = this.scene.surfacePoint(surface, cu, cv, 0);
+      const dx = p.x - x, dz = p.z - z;
       if (Math.hypot(dx, dz) < 0.15) return C.robot.yawOffset;
       return Math.atan2(dx, dz);
     },
@@ -1066,9 +1090,15 @@
         if (out.some((c) => Math.hypot(c.x - x, c.z - z) < 0.25)) return;
         out.push({ x: x, z: z, yaw: yaw });
       };
-      if (surface === 'wall') {
-        push(cu, R.wallZ + 1.75);
-        push(cu, R.wallZ + 2.35);
+      const f = C.surfaceFrame(surface);
+      if (f.isWall) {
+        const c = this.scene.surfacePoint(surface, cu, cv, 0);
+        const n = f.normal, u = f.uDir;
+        push(c.x + n[0] * 1.25, c.z + n[2] * 1.25);
+        push(c.x + n[0] * 1.65, c.z + n[2] * 1.65);
+        push(c.x + n[0] * 2.25, c.z + n[2] * 2.25);
+        push(c.x + n[0] * 1.85 + u[0] * 0.95, c.z + n[2] * 1.85 + u[2] * 0.95);
+        push(c.x + n[0] * 1.85 - u[0] * 0.95, c.z + n[2] * 1.85 - u[2] * 0.95);
         push(cur.x, cur.z);
       } else if (surface === 'ceiling') {
         push(cu, cv);
@@ -1124,6 +1154,56 @@
       return len;
     },
 
+    // 大选区按墙面长度方向拆分为多个可作业分区
+    splitPanels(surface, sel, maxSpan) {
+      const f = C.surfaceFrame(surface);
+      const span = sel.maxX - sel.minX;
+      const n = Math.max(1, Math.ceil((span - 0.02) / maxSpan));
+      if (n <= 1) return [sel];
+      const overlap = Math.min(0.18, (span / n) * 0.12);
+      const panels = [];
+      for (let i = 0; i < n; i++) {
+        let u0 = sel.minX + span * i / n;
+        let u1 = sel.minX + span * (i + 1) / n;
+        if (i > 0) u0 -= overlap;
+        if (i < n - 1) u1 += overlap;
+        u0 = U.clamp(u0, -f.width / 2 + 0.03, f.width / 2 - 0.03);
+        u1 = U.clamp(u1, -f.width / 2 + 0.03, f.width / 2 - 0.03);
+        if (u1 - u0 < 0.2) continue;
+        panels.push({ surface: surface, minX: u0, maxX: u1, minY: sel.minY, maxY: sel.maxY });
+      }
+      return panels.length ? panels : [sel];
+    },
+
+    applyJob(index) {
+      const jobs = this.pathJobs || [];
+      const job = jobs[index];
+      if (!job) return;
+      this.jobIndex = index;
+      this.path = job.path;
+      this.pathCum = job.cum;
+      this.pathJointDur = job.jointDur;
+      this.pathLength = job.length;
+      this.pathBase = job.base;
+      this.pathRoute = job.route;
+      this.pathBranch = job.branch;
+      this.pathDir = this.scene.surfaceNormal(job.surface);
+      let offset = 0;
+      for (let i = 0; i < index; i++) offset += jobs[i].length;
+      this.jobOffset = offset;
+    },
+
+    jobTime(job, speed) {
+      if (!job || !job.path || job.path.length < 2) return 0;
+      const v = Math.max(0.05, speed || 0.5);
+      let total = 0;
+      for (let i = 1; i < job.path.length; i++) {
+        const segLen = Math.max(1e-4, job.cum[i] - job.cum[i - 1]);
+        total += Math.max(1e-4, segLen / v, job.jointDur[i] || 0);
+      }
+      return total;
+    },
+
     buildPath() {
       const ui = SB.UI;
       if (this.isLocked() || this.isBusy()) return;
@@ -1134,16 +1214,78 @@
       const p = this.params;
       const sel = this.selection;
       const surface = sel.surface || this.surface;
+      const savedBase = this.robot.getBasePose();
+      const startJoints = this.robot.getJoints().slice();
+      const single = this.planRect(surface, sel, savedBase, startJoints);
+      let jobs = [];
+      let panelized = false;
+      if (single && single.unreachable <= 8) {
+        jobs = [single];
+      } else {
+        // 选区超出单点作业范围时，沿墙面长度方向分成多个分区，
+        // 每个分区由底盘重新定位后再用机械臂全伸喷涂
+        const maxSpan = C.isWallSurface(surface) ? 2.6 : 2.4;
+        const panels = this.splitPanels(surface, sel, maxSpan);
+        if (panels.length > 1) {
+          let from = savedBase;
+          const list = [];
+          panels.forEach((panel) => {
+            const job = this.planRect(surface, panel, from, startJoints);
+            if (!job) return;
+            list.push(job);
+            from = job.base;
+          });
+          if (list.length === panels.length) {
+            const bad = list.reduce((s, j) => s + j.unreachable, 0);
+            if (!single || bad < single.unreachable) {
+              jobs = list;
+              panelized = true;
+            }
+          }
+        }
+        if (!jobs.length && single) jobs = [single];
+      }
+      if (!jobs.length) {
+        ui.toast('无法生成有效路径，请扩大选区或调整喷涂距离', 'error');
+        return;
+      }
+      this.pathJobs = jobs;
+      this.taskTotalLength = jobs.reduce((s, j) => s + j.length, 0);
+      this.applyJob(0);
+      this.scene.showPaths(jobs.map((j) => j.path));
+      this.clearResume();
+      ui.setPathButtons({ hasPath: true, hasSelection: true, running: false });
+      const points = jobs.reduce((s, j) => s + j.path.length, 0);
+      const driveDist = jobs.reduce((s, j) => s + this.routeLength(j.route), 0);
+      let est = driveDist / C.baseSpeed;
+      jobs.forEach((j) => { est += this.jobTime(j, p.speed); });
+      ui.setSelectInfo('路径 ' + points + ' 点 · ' + this.taskTotalLength.toFixed(1) + ' m' +
+        (panelized ? ' · ' + jobs.length + ' 分区' : '') + ' · 底盘 ' + driveDist.toFixed(1) +
+        ' m · 预计 ' + U.fmtTime(est));
+      ui.log('S 形路径生成：' + this.surfaceName(surface) + ' ' + points + ' 点，总长 ' +
+        this.taskTotalLength.toFixed(2) + ' m，行距 ' + Math.max(0.05, (p.fanWidth || 0.3) * 0.5).toFixed(3) +
+        ' m' + (panelized ? '，分 ' + jobs.length + ' 个分区' : ''), 'ok');
+      const unreachable = jobs.reduce((s, j) => s + j.unreachable, 0);
+      if (unreachable > 0) {
+        ui.toast('部分路径点超出可达范围（' + unreachable + '/' + points + '），可能影响覆盖', 'warn');
+        ui.log('路径中有 ' + unreachable + ' 个点不可完全达', 'warn');
+      } else {
+        ui.toast('路径已生成，点击「开始' + (SB.Tools ? SB.Tools.current().short : '喷涂') + '」底盘将自动前往作业面', 'ok');
+      }
+    },
+
+    // 以给定底盘位姿为起点，为单个矩形选区规划 S 形路径
+    planRect(surface, sel, fromBase, startJoints) {
+      const p = this.params;
       const fan = U.clamp(p.fanWidth || 0.3, 0.1, 0.6);
       // 行距取半扇幅，相邻行程重叠 50%，避免行间出现漏喷条纹
       const gap = Math.max(0.05, fan * 0.5);
       // 路径仅外扩极小余量：喷枪中心贴近选区边界，四角可获得完整雾化覆盖，
       // 同时避免因外扩过多导致边界点超出机械臂可达范围
       const overshoot = Math.min(0.04, fan * 0.12);
-      const halfU = (surface === 'wall' ? C.room.wallWidth : C.room.width) / 2;
-      const vLimit = surface === 'wall'
-        ? { min: 0.08, max: C.room.wallHeight - 0.08 }
-        : { min: -C.room.depth / 2 + 0.05, max: C.room.depth / 2 - 0.05 };
+      const sf = C.surfaceFrame(surface);
+      const halfU = sf.width / 2;
+      const vLimit = { min: sf.vMin + 0.08, max: sf.vMax - 0.08 };
       let minU = U.clamp(sel.minX - overshoot, -halfU + 0.02, halfU - 0.02);
       let maxU = U.clamp(sel.maxX + overshoot, -halfU + 0.02, halfU - 0.02);
       let minV = U.clamp(sel.minY - overshoot, vLimit.min, vLimit.max);
@@ -1185,10 +1327,8 @@
       }
 
       const normal = this.scene.surfaceNormal(surface);
-      const startJoints = this.robot.getJoints().slice();
-      const savedBase = this.robot.getBasePose();
       let candidates = this.baseCandidates(surface, sel);
-      if (!candidates.length) candidates = [{ x: savedBase.x, z: savedBase.z, yaw: savedBase.yaw }];
+      if (!candidates.length) candidates = [{ x: fromBase.x, z: fromBase.z, yaw: fromBase.yaw }];
       const jointJump = (a, b) => {
         let max = 0;
         for (let i = 0; i < 6; i++) max = Math.max(max, Math.abs(U.norm180(b[i] - a[i])));
@@ -1198,7 +1338,7 @@
       const stats = [];
 
       candidates.forEach((cand) => {
-        const route = this.baseRoute(savedBase, cand);
+        const route = this.baseRoute(fromBase, cand);
         if (!route) return;
         this.robot.setBasePose(cand.x, cand.z, cand.yaw);
         // 同一条连续路径固定肘部分支，分别求解后择优
@@ -1249,54 +1389,38 @@
         }
       });
 
-      this.robot.setBasePose(savedBase.x, savedBase.z, savedBase.yaw);
+      this.robot.setBasePose(fromBase.x, fromBase.z, fromBase.yaw);
       this.robot.setJoints(startJoints);
       this._lastBranchStats = stats;
-      if (!bestOverall) {
-        ui.toast('无法生成有效路径，请扩大选区或调整喷涂距离', 'error');
-        return;
-      }
+      if (!bestOverall) return null;
       const list = bestOverall.best.list;
-      const unreachable = bestOverall.best.unreachable;
-      this.pathBranch = bestOverall.best.branch;
-      this.pathBase = { x: bestOverall.cand.x, z: bestOverall.cand.z, yaw: bestOverall.cand.yaw };
-      this.pathRoute = bestOverall.route;
       const cum = [0];
       for (let i = 1; i < list.length; i++) {
         const du = list[i].u - list[i - 1].u;
         const dv = list[i].v - list[i - 1].v;
         cum.push(cum[i - 1] + Math.hypot(du, dv));
       }
-      this.path = list;
-      this.pathCum = cum;
-      this.pathLength = cum[cum.length - 1];
-      this.pathDir = normal.clone();
-      this.pathJointDur = new Array(list.length).fill(0);
+      const jointDur = new Array(list.length).fill(0);
       for (let i = 1; i < list.length; i++) {
         let dur = 0;
         for (let k = 0; k < 6; k++) {
           const delta = Math.abs(U.norm180(list[i].angles[k] - list[i - 1].angles[k]));
           dur = Math.max(dur, delta / Math.max(1, C.robot.joints[k].speed || 90));
         }
-        this.pathJointDur[i] = Math.min(2.5, dur);
+        jointDur[i] = Math.min(2.5, dur);
       }
-      this.scene.showPath(list);
-      this.clearResume();
-      ui.setPathButtons({ hasPath: true, hasSelection: true, running: false });
-      const driveDist = this.routeLength(bestOverall.route);
-      const est = this.estimatePathTime(p.speed) + driveDist / C.baseSpeed;
-      ui.setSelectInfo('路径 ' + list.length + ' 点 · ' + this.pathLength.toFixed(1) + ' m · 底盘 ' +
-        driveDist.toFixed(1) + ' m · 预计 ' + U.fmtTime(est));
-      ui.log('S 形路径生成：' + this.surfaceName(surface) + ' ' + list.length + ' 点，总长 ' +
-        this.pathLength.toFixed(2) + ' m，行距 ' + gap.toFixed(3) + ' m', 'ok');
-      ui.log('底盘待命位：(' + bestOverall.cand.x.toFixed(2) + ', ' + bestOverall.cand.z.toFixed(2) +
-        ')，行驶距离 ' + driveDist.toFixed(2) + ' m', 'info');
-      if (unreachable > 0) {
-        ui.toast('部分路径点超出可达范围（' + unreachable + '/' + list.length + '），可能影响覆盖', 'warn');
-        ui.log('路径中有 ' + unreachable + ' 个点不可完全达', 'warn');
-      } else {
-        ui.toast('路径已生成，点击「开始' + (SB.Tools ? SB.Tools.current().short : '喷涂') + '」底盘将自动前往作业面', 'ok');
-      }
+      return {
+        surface: surface,
+        path: list,
+        cum: cum,
+        jointDur: jointDur,
+        length: cum[cum.length - 1],
+        base: { x: bestOverall.cand.x, z: bestOverall.cand.z, yaw: bestOverall.cand.yaw },
+        route: bestOverall.route,
+        branch: bestOverall.best.branch,
+        unreachable: bestOverall.best.unreachable,
+        collisions: bestOverall.best.collisions
+      };
     },
 
     estimatePathTime(speed) {
@@ -1333,6 +1457,10 @@
       this.pathJointDur = null;
       this.pathBase = null;
       this.pathRoute = null;
+      this.pathJobs = null;
+      this.jobIndex = 0;
+      this.jobOffset = 0;
+      this.taskTotalLength = 0;
       if (clearSelection) {
         this.selection = null;
         this.spray.setTargetRect(null, this.surface);
@@ -1432,6 +1560,7 @@
         ui.toast('料桶余量不足，请先补充涂料', 'warn');
         return;
       }
+      if (this.pathJobs && this.pathJobs.length) this.applyJob(0);
       this.setSpray(false, true);
       this.scene.setFollow(true, true);
       this.clearResume();
@@ -1612,6 +1741,10 @@
         const i = pr.index;
         const j = i + 1;
         if (j >= this.path.length) {
+          if (this.pathJobs && this.jobIndex < this.pathJobs.length - 1) {
+            this.nextJob();
+            return;
+          }
           this.finishPathRun(false);
           return;
         }
@@ -1642,8 +1775,10 @@
       if (pr.syncClock > 0.18) {
         pr.syncClock = 0;
         ui.syncJoints(this.robot.getJoints());
-        const pct = U.clamp(pr.travel / Math.max(0.001, this.pathLength), 0, 1);
-        ui.setSelectInfo(this.toolVerb() + '中 ' + Math.round(pct * 100) + '% · ' + pr.travel.toFixed(1) + ' / ' + this.pathLength.toFixed(1) + ' m');
+        const done = (this.jobOffset || 0) + pr.travel;
+        const total = this.taskTotalLength || this.pathLength;
+        const pct = U.clamp(done / Math.max(0.001, total), 0, 1);
+        ui.setSelectInfo(this.toolVerb() + '中 ' + Math.round(pct * 100) + '% · ' + done.toFixed(1) + ' / ' + total.toFixed(1) + ' m');
       }
       pr.collisionClock += dt;
       if (pr.collisionClock > 0.18) {
@@ -1654,6 +1789,29 @@
           return;
         }
       }
+    },
+
+    // 当前分区完成后折叠机械臂，底盘移动到下一分区并继续喷涂
+    nextJob() {
+      const ui = SB.UI;
+      if (this.pathRun) {
+        this.captureResumeState('分区切换');
+        ui.setResumeAvailable(false);
+      }
+      this.setSpray(false, true);
+      this.pathRun = null;
+      this.state = 'moving';
+      ui.setStatus('moving', '分区完成 · 前往下一分区');
+      ui.setSelectInfo('分区完成 · 底盘重新定位');
+      ui.setInterlock(true, '自动作业进行中');
+      this.foldToTransport(() => {
+        this.jobIndex++;
+        this.applyJob(this.jobIndex);
+        const target = this.pathBase;
+        const base = this.robot.getBasePose();
+        if (target && Math.hypot(base.x - target.x, base.z - target.z) > 0.15) this.beginBaseDrive();
+        else this.beginPathMotion();
+      });
     },
 
     finishPathRun(aborted, reason) {
@@ -1709,9 +1867,14 @@
         pathLength: this.pathLength,
         pathBase: this.pathBase ? Object.assign({}, this.pathBase) : null,
         pathRoute: this.pathRoute ? this.pathRoute.slice() : null,
+        jobs: this.pathJobs ? this.pathJobs.slice() : null,
+        jobIndex: this.jobIndex || 0,
+        jobOffset: this.jobOffset || 0,
+        taskTotalLength: this.taskTotalLength || this.pathLength,
         index: index,
         frac: frac,
         travel: travel,
+        overallTravel: (this.jobOffset || 0) + travel,
         selection: this.selection ? U.clone(this.selection) : null,
         surface: this.surface,
         params: U.clone(this.params),
@@ -1754,10 +1917,15 @@
       this.pathLength = rs.pathLength;
       this.pathBase = rs.pathBase ? Object.assign({}, rs.pathBase) : null;
       this.pathRoute = rs.pathRoute ? rs.pathRoute.slice() : [];
+      this.pathJobs = rs.jobs ? rs.jobs.slice() : null;
+      this.jobIndex = rs.jobIndex || 0;
+      this.taskTotalLength = rs.taskTotalLength || rs.pathLength;
+      if (this.pathJobs && this.pathJobs[this.jobIndex]) this.applyJob(this.jobIndex);
+      else this.jobOffset = rs.jobOffset || 0;
       this.taskTime = rs.taskTime || 0;
       this.setSurfaceUI(this.surface);
       if (this.selection) this.scene.setSelection(this.selection, this.surface);
-      this.scene.showPath(this.path);
+      this.scene.showPaths(this.pathJobs ? this.pathJobs.map((j) => j.path) : [this.path]);
       if (this.pathBase) this.robot.setBasePose(this.pathBase.x, this.pathBase.z, this.pathBase.yaw);
       const index = U.clamp(rs.index, 0, this.path.length - 2);
       const frac = U.clamp(rs.frac || 0, 0, 1);
@@ -1768,7 +1936,8 @@
       const segDur = Math.max(1e-4, segLen / U.clamp(this.params.speed || 0.5, 0.05, 1.2),
         (this.pathJointDur && this.pathJointDur[index + 1]) || 0);
       const travel = U.clamp(rs.travel != null ? rs.travel : this.pathCum[index] + segLen * frac, 0, this.pathLength);
-      const pct = Math.round((travel / Math.max(0.001, this.pathLength)) * 100);
+      const overall = (this.jobOffset || 0) + travel;
+      const pct = Math.round((overall / Math.max(0.001, this.taskTotalLength || this.pathLength)) * 100);
       const from = this.robot.getJoints().slice();
       let maxDelta = 0;
       for (let i = 0; i < 6; i++) maxDelta = Math.max(maxDelta, Math.abs(U.norm180(targetPose[i] - from[i])));
@@ -1976,6 +2145,7 @@
       if (!this.isLocked()) this.state = 'ready';
       this.selectionMode = false;
       if (this.scene) this.scene.controls.enabled = true;
+      if (this.resumeState) SB.UI.setResumeAvailable(true, this.resumeState);
     },
 
     emergencyStop() {

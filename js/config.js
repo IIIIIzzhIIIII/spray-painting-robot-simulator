@@ -135,6 +135,32 @@
       return s;
     },
     room: ROOM,
+    /* 作业面：四面墙 + 天花板 + 地面，统一用局部 u/v 坐标描述 */
+    wallOrder: ['wall', 'wall-left', 'wall-right', 'wall-front'],
+    wallNames: { wall: '后墙', 'wall-left': '左墙', 'wall-right': '右墙', 'wall-front': '前墙' },
+    isWallSurface(id) {
+      return id === 'wall' || id === 'wall-left' || id === 'wall-right' || id === 'wall-front';
+    },
+    surfaceFrame(id) {
+      const R = this.room;
+      const W = R.width, D = R.depth, H = R.height;
+      if (id === 'ceiling') {
+        return { id: id, isWall: false, width: W, height: D, vMin: -D / 2, vMax: D / 2, anchor: [0, H, 0], uDir: [1, 0, 0], vDir: [0, 0, 1], normal: [0, -1, 0], rotY: 0 };
+      }
+      if (id === 'floor') {
+        return { id: id, isWall: false, width: W, height: D, vMin: -D / 2, vMax: D / 2, anchor: [0, 0, 0], uDir: [1, 0, 0], vDir: [0, 0, 1], normal: [0, 1, 0], rotY: 0 };
+      }
+      if (id === 'wall-left') {
+        return { id: id, isWall: true, width: D, height: H, vMin: 0, vMax: H, anchor: [-W / 2, 0, 0], uDir: [0, 0, -1], vDir: [0, 1, 0], normal: [1, 0, 0], rotY: Math.PI / 2 };
+      }
+      if (id === 'wall-right') {
+        return { id: id, isWall: true, width: D, height: H, vMin: 0, vMax: H, anchor: [W / 2, 0, 0], uDir: [0, 0, 1], vDir: [0, 1, 0], normal: [-1, 0, 0], rotY: -Math.PI / 2 };
+      }
+      if (id === 'wall-front') {
+        return { id: id, isWall: true, width: W, height: H, vMin: 0, vMax: H, anchor: [0, 0, D / 2], uDir: [-1, 0, 0], vDir: [0, 1, 0], normal: [0, 0, -1], rotY: Math.PI };
+      }
+      return { id: 'wall', isWall: true, width: W, height: H, vMin: 0, vMax: H, anchor: [0, 0, R.wallZ], uDir: [1, 0, 0], vDir: [0, 1, 0], normal: [0, 0, 1], rotY: 0 };
+    },
     baseSpeed: 0.62,
     robot: {
       position: { x: 0, y: 0, z: 0.4 },

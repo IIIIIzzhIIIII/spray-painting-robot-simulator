@@ -895,8 +895,10 @@
       if (!btn) return;
       btn.hidden = !on;
       btn.classList.toggle('hidden', !on);
-      if (on && state && state.pathLength > 0) {
-        const pct = Math.round(U.clamp((state.travel || 0) / state.pathLength, 0, 1) * 100);
+      if (on && state && (state.taskTotalLength || state.pathLength) > 0) {
+        const total = state.taskTotalLength || state.pathLength;
+        const done = state.overallTravel != null ? state.overallTravel : (state.travel || 0);
+        const pct = Math.round(U.clamp(done / total, 0, 1) * 100);
         btn.textContent = '继续作业 ' + pct + '%';
       } else if (on) {
         btn.textContent = '继续作业';

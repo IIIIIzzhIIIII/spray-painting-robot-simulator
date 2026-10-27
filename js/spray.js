@@ -59,12 +59,11 @@
     },
 
     createSurface(kind) {
-      const R = C.room;
+      const f = C.surfaceFrame(kind);
       const mobile = U.isMobile();
-      const isWall = kind === 'wall';
-      const wm = isWall ? R.wallWidth : R.width;
-      const hm = isWall ? R.wallHeight : R.depth;
-      const base = isWall ? (mobile ? 1024 : 2048) : (mobile ? 640 : 1024);
+      const wm = f.width;
+      const hm = f.height;
+      const base = f.isWall ? (mobile ? 1024 : 2048) : (mobile ? 640 : 1024);
       const pw = base;
       const ph = Math.max(128, Math.round(base * hm / wm));
       const cv = document.createElement('canvas');
@@ -78,15 +77,11 @@
         polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
       });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wm, hm), mat);
-      if (kind === 'wall') {
-        mesh.position.set(0, R.height / 2, R.wallZ + 0.014);
-      } else if (kind === 'ceiling') {
-        mesh.rotation.x = Math.PI / 2;
-        mesh.position.set(0, R.height - 0.014, 0);
-      } else {
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.set(0, 0.014, 0);
-      }
+      const p = this.sceneMgr.surfacePoint(kind, 0, f.isWall ? f.height / 2 : (f.vMin + f.vMax) / 2, 0.014);
+      mesh.position.copy(p);
+      if (f.isWall) mesh.rotation.set(0, f.rotY, 0);
+      else if (kind === 'ceiling') mesh.rotation.set(Math.PI / 2, 0, 0);
+      else mesh.rotation.set(-Math.PI / 2, 0, 0);
       mesh.renderOrder = 3;
       mesh.name = 'PaintOverlay_' + kind;
       this.sceneMgr.scene.add(mesh);
@@ -105,7 +100,7 @@
 
     buildSurfaces() {
       this.disposeSurfaces();
-      this.createSurface('wall');
+      C.wallOrder.forEach((id) => this.createSurface(id));
       this.createSurface('ceiling');
       this.createSurface('floor');
       this.setSurface(this.surface || 'wall');
@@ -137,7 +132,7 @@
       if (rect) {
         this.targetArea = Math.max(0.01, (rect.maxX - rect.minX) * (rect.maxY - rect.minY));
       } else {
-        const d = kind === 'wall' ? C.defaultSelection : C.defaultSelectionFlat;
+        const d = C.isWallSurface(kind) ? C.defaultSelection : C.defaultSelectionFlat;
         this.targetArea = (d.maxX - d.minX) * (d.maxY - d.minY);
       }
       this.area = this.surfaces[kind] ? this.surfaces[kind].area : 0;
@@ -192,35 +187,20 @@
 
     projectToSurface(tcp, direction, surface) {
       if (!tcp || !direction) return null;
-      const R = C.room;
       const kind = surface || this.surface;
-      if (kind === 'wall') {
-        const dz = direction.z;
-        if (dz > -0.18) return null;
-        const t = (R.wallZ - tcp.z) / dz;
-        if (!isFinite(t) || t < 0.05 || t > 1.5) return null;
-        const x = tcp.x + direction.x * t;
-        const y = tcp.y + direction.y * t;
-        if (Math.abs(x) > R.wallWidth / 2 || y < 0 || y > R.wallHeight) return null;
-        return { u: x, v: y, x: x, y: y, distance: t, surface: kind };
-      }
-      const dy = direction.y;
-      if (kind === 'ceiling') {
-        if (dy < 0.18) return null;
-        const t = (R.height - tcp.y) / dy;
-        if (!isFinite(t) || t < 0.05 || t > 1.5) return null;
-        const x = tcp.x + direction.x * t;
-        const z = tcp.z + direction.z * t;
-        if (Math.abs(x) > R.width / 2 || Math.abs(z) > R.depth / 2) return null;
-        return { u: x, v: z, x: x, y: z, distance: t, surface: kind };
-      }
-      if (dy > -0.18) return null;
-      const t = (0 - tcp.y) / dy;
+      const f = C.surfaceFrame(kind);
+      const n = new THREE.Vector3(f.normal[0], f.normal[1], f.normal[2]);
+      const denom = direction.dot(n);
+      if (denom > -0.18) return null;
+      const anchor = new THREE.Vector3(f.anchor[0], f.anchor[1], f.anchor[2]);
+      const t = n.dot(anchor.clone().sub(tcp)) / denom;
       if (!isFinite(t) || t < 0.05 || t > 1.5) return null;
-      const x = tcp.x + direction.x * t;
-      const z = tcp.z + direction.z * t;
-      if (Math.abs(x) > R.width / 2 || Math.abs(z) > R.depth / 2) return null;
-      return { u: x, v: z, x: x, y: z, distance: t, surface: kind };
+      const point = tcp.clone().addScaledVector(direction, t);
+      const rel = point.clone().sub(anchor);
+      const u = rel.dot(new THREE.Vector3(f.uDir[0], f.uDir[1], f.uDir[2]));
+      const v = rel.dot(new THREE.Vector3(f.vDir[0], f.vDir[1], f.vDir[2]));
+      if (Math.abs(u) > f.width / 2 || v < f.vMin || v > f.vMax) return null;
+      return { u: u, v: v, x: u, y: v, distance: t, surface: kind };
     },
 
     projectToWall(tcp, direction) {
@@ -255,11 +235,11 @@
       const s = this.surfaces[kind];
       if (!s) return 0;
       const cell = C.coverageCell;
-      const isWall = kind === 'wall';
-      const halfU = (isWall ? R.wallWidth : R.width) / 2;
-      const v0 = isWall ? 0 : -R.depth / 2;
-      const maxIy = Math.floor((isWall ? R.height : R.depth) / cell);
-      const maxIx = Math.floor((2 * halfU) / cell);
+      const f = C.surfaceFrame(kind);
+      const halfU = f.width / 2;
+      const v0 = f.vMin;
+      const maxIy = Math.floor(f.height / cell);
+      const maxIx = Math.floor(f.width / cell);
       const ix0 = Math.floor((u - radius + halfU) / cell);
       const ix1 = Math.floor((u + radius + halfU) / cell);
       const iy0 = Math.floor((v - radius - v0) / cell);
@@ -295,12 +275,12 @@
       const s = this.surfaces[kind];
       if (!s) return;
       const R = C.room;
-      const halfU = (kind === 'wall' ? R.wallWidth : R.width) / 2;
+      const f = C.surfaceFrame(kind);
+      const halfU = f.width / 2;
       const px = (u + halfU) * s.pxU;
-      let py;
-      if (kind === 'wall') py = (R.height - v) * s.pxV;
-      else if (kind === 'ceiling') py = (R.depth / 2 - v) * s.pxV;
-      else py = (v + R.depth / 2) * s.pxV;
+      const py = f.isWall
+        ? (f.height - v) * s.pxV
+        : (kind === 'ceiling' ? (f.vMax - v) * s.pxV : (v - f.vMin) * s.pxV);
       const rx = Math.max(3, radius * s.pxU);
       const ry = Math.max(3, radius * s.pxV);
       const alpha = U.clamp(0.10 + ((thickness || 450) / 1000) * 0.035, 0.10, 0.24);
@@ -335,11 +315,11 @@
       const s = this.surfaces[kind];
       if (!s) return 0;
       const cell = C.coverageCell;
-      const isWall = kind === 'wall';
-      const halfU = (isWall ? R.wallWidth : R.width) / 2;
-      const v0 = isWall ? 0 : -R.depth / 2;
-      const maxIy = Math.floor((isWall ? R.height : R.depth) / cell);
-      const maxIx = Math.floor((2 * halfU) / cell);
+      const f = C.surfaceFrame(kind);
+      const halfU = f.width / 2;
+      const v0 = f.vMin;
+      const maxIy = Math.floor(f.height / cell);
+      const maxIx = Math.floor(f.width / cell);
       const ix0 = Math.floor((u - hu + halfU) / cell);
       const ix1 = Math.floor((u + hu + halfU) / cell);
       const iy0 = Math.floor((v - hv - v0) / cell);
@@ -365,12 +345,12 @@
       const s = this.surfaces[kind];
       if (!s) return;
       const R = C.room;
-      const halfU = (kind === 'wall' ? R.wallWidth : R.width) / 2;
+      const f = C.surfaceFrame(kind);
+      const halfU = f.width / 2;
       const px = (u + halfU) * s.pxU;
-      let py;
-      if (kind === 'wall') py = (R.height - v) * s.pxV;
-      else if (kind === 'ceiling') py = (R.depth / 2 - v) * s.pxV;
-      else py = (v + R.depth / 2) * s.pxV;
+      const py = f.isWall
+        ? (f.height - v) * s.pxV
+        : (kind === 'ceiling' ? (f.vMax - v) * s.pxV : (v - f.vMin) * s.pxV);
       const rx = Math.max(3, hu * s.pxU);
       const ry = Math.max(3, hv * s.pxV);
       const alpha = U.clamp(0.14 + ((thickness || 1800) / 1000) * 0.022, 0.14, 0.3);
@@ -391,11 +371,11 @@
       const s = this.surfaces[kind];
       if (!s) return 0;
       const cell = C.coverageCell;
-      const isWall = kind === 'wall';
-      const halfU = (isWall ? R.wallWidth : R.width) / 2;
-      const v0 = isWall ? 0 : -R.depth / 2;
-      const maxIy = Math.floor((isWall ? R.height : R.depth) / cell);
-      const maxIx = Math.floor((2 * halfU) / cell);
+      const f = C.surfaceFrame(kind);
+      const halfU = f.width / 2;
+      const v0 = f.vMin;
+      const maxIy = Math.floor(f.height / cell);
+      const maxIx = Math.floor(f.width / cell);
       const ix0 = Math.floor((u - radius + halfU) / cell);
       const ix1 = Math.floor((u + radius + halfU) / cell);
       const iy0 = Math.floor((v - radius - v0) / cell);
@@ -419,12 +399,12 @@
       const s = this.surfaces[kind];
       if (!s) return;
       const R = C.room;
-      const halfU = (kind === 'wall' ? R.wallWidth : R.width) / 2;
+      const f = C.surfaceFrame(kind);
+      const halfU = f.width / 2;
       const px = (u + halfU) * s.pxU;
-      let py;
-      if (kind === 'wall') py = (R.height - v) * s.pxV;
-      else if (kind === 'ceiling') py = (R.depth / 2 - v) * s.pxV;
-      else py = (v + R.depth / 2) * s.pxV;
+      const py = f.isWall
+        ? (f.height - v) * s.pxV
+        : (kind === 'ceiling' ? (f.vMax - v) * s.pxV : (v - f.vMin) * s.pxV);
       const rx = Math.max(3, radius * s.pxU);
       const ry = Math.max(3, radius * s.pxV);
       const ctx = s.ctx;

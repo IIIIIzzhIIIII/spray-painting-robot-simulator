@@ -596,7 +596,7 @@
       this.selectionGroup.userData.border = border;
       this.scene.add(this.selectionGroup);
 
-      const path = new THREE.Line(new THREE.BufferGeometry(),
+      const path = new THREE.LineSegments(new THREE.BufferGeometry(),
         new THREE.LineBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.98 }));
       path.visible = false;
       const dots = new THREE.Points(new THREE.BufferGeometry(),
@@ -611,28 +611,30 @@
       this.scene.add(this.pathGroup);
     },
     surfacePoint(surface, u, v, lift) {
-      const R = C.room;
+      const f = C.surfaceFrame(surface || this.surface || 'wall');
       const L = lift || 0;
-      if (surface === 'ceiling') return new THREE.Vector3(u, R.height - L, v);
-      if (surface === 'floor') return new THREE.Vector3(u, L, v);
-      return new THREE.Vector3(u, v, R.wallZ + L);
+      const n = f.normal;
+      return new THREE.Vector3(
+        f.anchor[0] + f.uDir[0] * u + f.vDir[0] * v + n[0] * L,
+        f.anchor[1] + f.uDir[1] * u + f.vDir[1] * v + n[1] * L,
+        f.anchor[2] + f.uDir[2] * u + f.vDir[2] * v + n[2] * L
+      );
     },
 
     surfaceNormal(surface) {
-      if (surface === 'ceiling') return new THREE.Vector3(0, 1, 0);
-      if (surface === 'floor') return new THREE.Vector3(0, -1, 0);
-      return new THREE.Vector3(0, 0, -1);
+      const f = C.surfaceFrame(surface || this.surface || 'wall');
+      const n = f.normal;
+      return new THREE.Vector3(-n[0], -n[1], -n[2]);
     },
 
     setSelection(rect, surface) {
       if (!rect || !this.selectionGroup) return null;
-      const R = C.room;
       const s = surface || this.surface || 'wall';
-      const isWall = s === 'wall';
-      const limU = (isWall ? R.wallWidth : R.width) / 2;
-      const limV = isWall ? R.wallHeight : R.depth / 2;
-      const vMin = isWall ? 0.08 : -limV + 0.05;
-      const vMax = isWall ? R.wallHeight - 0.08 : limV - 0.05;
+      const f = C.surfaceFrame(s);
+      const limU = f.width / 2;
+      const edge = f.isWall ? 0.08 : 0.05;
+      const vMin = f.vMin + edge;
+      const vMax = f.vMax - edge;
       const x0 = U.clamp(Math.min(rect.minX, rect.maxX), -limU + 0.05, limU - 0.05);
       const x1 = U.clamp(Math.max(rect.minX, rect.maxX), -limU + 0.05, limU - 0.05);
       const y0 = U.clamp(Math.min(rect.minY, rect.maxY), vMin, vMax);
@@ -643,19 +645,11 @@
       this.surface = s;
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
       const mesh = this.selectionGroup.userData.mesh;
-      if (s === 'wall') {
-        mesh.rotation.set(0, 0, 0);
-        mesh.position.set(cx, cy, R.wallZ + 0.013);
-        mesh.scale.set(x1 - x0, y1 - y0, 1);
-      } else if (s === 'ceiling') {
-        mesh.rotation.set(Math.PI / 2, 0, 0);
-        mesh.position.set(cx, R.height - 0.013, cy);
-        mesh.scale.set(x1 - x0, y1 - y0, 1);
-      } else {
-        mesh.rotation.set(-Math.PI / 2, 0, 0);
-        mesh.position.set(cx, 0.013, cy);
-        mesh.scale.set(x1 - x0, y1 - y0, 1);
-      }
+      mesh.position.copy(this.surfacePoint(s, cx, cy, 0.013));
+      if (f.isWall) mesh.rotation.set(0, f.rotY, 0);
+      else if (s === 'ceiling') mesh.rotation.set(Math.PI / 2, 0, 0);
+      else mesh.rotation.set(-Math.PI / 2, 0, 0);
+      mesh.scale.set(x1 - x0, y1 - y0, 1);
       mesh.visible = true;
       const p0 = this.surfacePoint(s, x0, y0, 0.015);
       const p1 = this.surfacePoint(s, x1, y0, 0.015);
@@ -668,19 +662,32 @@
       return r;
     },
 
-    showPath(plan) {
-      if (!plan || !plan.length || !this.pathGroup) return;
-      const surface = (plan[0] && plan[0].surface) || this.surface || 'wall';
-      const pts = plan.map((p) => this.surfacePoint(p.surface || surface, p.u, p.v, 0.024));
+    showPaths(segments) {
+      if (!segments || !this.pathGroup) return;
+      const lists = Array.isArray(segments[0]) ? segments : [segments];
+      const pairs = [];
+      const dotPoints = [];
+      lists.forEach((plan) => {
+        if (!plan || !plan.length) return;
+        const surface = (plan[0] && plan[0].surface) || this.surface || 'wall';
+        const pts = plan.map((p) => this.surfacePoint(p.surface || surface, p.u, p.v, 0.024));
+        dotPoints.push.apply(dotPoints, pts);
+        for (let i = 1; i < pts.length; i++) pairs.push(pts[i - 1], pts[i]);
+      });
+      if (!pairs.length) return;
       const path = this.pathGroup.userData.line;
       path.geometry.dispose();
-      path.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+      path.geometry = new THREE.BufferGeometry().setFromPoints(pairs);
       path.visible = true;
       const dots = this.pathGroup.userData.dots;
       dots.geometry.dispose();
-      dots.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+      dots.geometry = new THREE.BufferGeometry().setFromPoints(dotPoints);
       dots.visible = true;
-      this.pathPoints = plan;
+      this.pathPoints = lists;
+    },
+
+    showPath(plan) {
+      this.showPaths([plan]);
     },
 
     clearPlanning(clearSelection) {
@@ -703,19 +710,17 @@
       this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const s = surface || this.surface || 'wall';
-      const R = C.room;
-      let plane;
-      if (s === 'ceiling') plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), R.height);
-      else if (s === 'floor') plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-      else plane = this.wallPlane;
+      const f = C.surfaceFrame(s);
+      const n = new THREE.Vector3(f.normal[0], f.normal[1], f.normal[2]);
+      const anchor = new THREE.Vector3(f.anchor[0], f.anchor[1], f.anchor[2]);
+      const plane = new THREE.Plane(n, -n.dot(anchor));
       const point = new THREE.Vector3();
       if (!this.raycaster.ray.intersectPlane(plane, point)) return null;
-      if (s === 'wall') {
-        if (Math.abs(point.x) > R.wallWidth / 2 || point.y < 0 || point.y > R.wallHeight) return null;
-        return { x: point.x, y: point.y, u: point.x, v: point.y, z: R.wallZ, surface: s, point };
-      }
-      if (Math.abs(point.x) > R.width / 2 || Math.abs(point.z) > R.depth / 2) return null;
-      return { x: point.x, y: point.z, u: point.x, v: point.z, z: point.z, surface: s, point };
+      const d = point.clone().sub(anchor);
+      const u = d.dot(new THREE.Vector3(f.uDir[0], f.uDir[1], f.uDir[2]));
+      const v = d.dot(new THREE.Vector3(f.vDir[0], f.vDir[1], f.vDir[2]));
+      if (Math.abs(u) > f.width / 2 || v < f.vMin || v > f.vMax) return null;
+      return { x: u, y: v, u: u, v: v, z: point.z, surface: s, point: point };
     },
 
     raycastWall(clientX, clientY) {
@@ -765,18 +770,32 @@
     },
     setView(name, instant) {
       if (name !== 'follow' && this.follow) this.setFollow(false, true);
-      if (this._ceilingMesh) this._ceilingMesh.visible = name !== 'ceiling';
+      if (this._ceilingMesh) this._ceilingMesh.visible = true;
       const R = C.room;
+      const wallView = (id) => {
+        const f = C.surfaceFrame(id);
+        const c = this.surfacePoint(id, 0, f.isWall ? 1.55 : 0, 0);
+        const n = f.normal, u = f.uDir;
+        return {
+          pos: [c.x + n[0] * 3.2 + u[0] * 0.8, 2.15, c.z + n[2] * 3.2 + u[2] * 0.8],
+          target: [c.x, f.isWall ? 1.55 : 0, c.z]
+        };
+      };
       const presets = {
         overview: { pos: [R.width * 0.34, R.height * 0.95, R.depth * 0.34], target: [0, R.height * 0.35, -R.depth * 0.18] },
         arm: { pos: [R.width * 0.22, R.height * 0.72, R.depth * 0.28], target: [0, R.height * 0.45, -R.depth * 0.30] },
-        wall: { pos: [R.width * 0.20, R.height * 0.60, R.depth * 0.30], target: [0, R.height * 0.55, R.wallZ] },
-        ceiling: { pos: [R.width * 0.34, R.height + 2.8, R.depth * 0.34], target: [0, R.height, -R.depth * 0.04] },
+        wall: wallView('wall'),
+        'wall-left': wallView('wall-left'),
+        'wall-right': wallView('wall-right'),
+        'wall-front': wallView('wall-front'),
+        ceiling: { pos: [R.width * 0.30, R.height * 0.34, R.depth * 0.36], target: [0, R.height * 0.80, -R.depth * 0.05] },
         floor: { pos: [R.width * 0.16, R.height * 0.85, R.depth * 0.30], target: [0, 0, -R.depth * 0.05] }
       };
       const p = presets[name] || presets.overview;
+      // 仰视天花板需要相机低于观察点，放宽极角限制；其余视角保持在地面以上
+      if (this.controls) this.controls.maxPolarAngle = name === 'ceiling' ? Math.PI * 0.92 : Math.PI * 0.495;
       this._view = name;
-      SB.UI && SB.UI.setViewButton(name);
+      SB.UI && SB.UI.setViewButton(C.isWallSurface(name) ? 'wall' : name);
       if (instant) {
         this.camera.position.set(p.pos[0], p.pos[1], p.pos[2]);
         this.controls.target.set(p.target[0], p.target[1], p.target[2]);
