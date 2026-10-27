@@ -195,8 +195,8 @@
       <div class="tool-switch" id="toolSwitch" aria-label="末端模组快速切换">
         <span>末端</span>
         <button class="active" data-tool="spray">喷涂</button>
-        <button data-tool="trowel">刮腻子</button>
-        <button data-tool="sander">打磨腻子</button>
+        <button data-tool="trowel">批刮</button>
+        <button data-tool="sander">打磨</button>
       </div>
 
       <div class="scene-switch">
@@ -359,9 +359,11 @@
   <button class="mobile-nav-btn" data-mview="display">
     <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L14.9 3h-4l-.4 2.8a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.8 7.8 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.9h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM12.9 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg><span>设置</span>
   </button>
+  <button class="mobile-nav-btn nav-estop" id="mobileEstop" aria-label="紧急停止">
+    <span class="estop-dot">!</span><span>急停</span>
+  </button>
 </nav>
 
-<button class="mobile-estop" id="mobileEstop" aria-label="紧急停止"><span>急停</span></button>
 <div class="toast-stack" id="toastStack" aria-live="assertive"></div>
 
 <div class="modal-mask hidden" id="inventoryModal">
@@ -436,10 +438,10 @@
           <ol>
             <li>在画布右上角「场景」切换住宅、洁净厂房、钢结构厂房、储罐区、配电房等不同室内模型。</li>
             <li>在「喷涂工艺」的涂料参数库选择涂层（QZDS 001–024），查看取料参数；可开启「自适应工艺」自动匹配压力、扇幅、膜厚与速度。</li>
-            <li>在画布左下方选择作业面「墙面 / 天花板 / 地面」，点击「框选区域」并拖出矩形，再「生成 S 路径」。</li>
+            <li>在画布左下方选择作业面「后墙 / 左墙 / 右墙 / 前墙 / 天花板 / 地面」，点击「框选区域」并拖出矩形，再「生成 S 路径」。</li>
             <li>点击「开始喷涂」或「执行喷涂」，机器人底盘会自动行驶至作业面，伸臂后按 S 形轨迹喷涂并统计面积与耗料。</li>
             <li>点击画布右上角「喷嘴特写」或工艺面板中的按钮，可查看雾化粒子与湿膜堆积的自适应动态。</li>
-            <li>画布左上方可快速切换末端模组「喷涂 / 刮腻子 / 打磨腻子」；右上角「跟随」让相机随机器人移动。</li>
+            <li>画布左上方可快速切换末端模组「喷涂 / 批刮 / 打磨」；右上角「跟随」让相机随机器人移动。</li>
           </ol>
         </div>
         <div>

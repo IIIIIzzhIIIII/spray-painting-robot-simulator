@@ -308,7 +308,7 @@
       return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
     },
 
-    /* ---------- 刮腻子 / 打磨：矩形与去除操作 ---------- */
+    /* ---------- 批刮 / 打磨：矩形与去除操作 ---------- */
     markRect(u, v, hu, hv, surface) {
       const R = C.room;
       const kind = surface || this.surface;

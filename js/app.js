@@ -1585,21 +1585,57 @@
       });
     },
 
-    foldToTransport(done) {
+    startFoldMotion(from, to, onDone) {
       const ui = SB.UI;
-      const from = this.robot.getJoints().slice();
-      const home = this.robot.computeTransportJoints();
       let max = 0;
-      for (let i = 0; i < 6; i++) max = Math.max(max, Math.abs(U.norm180(home[i] - from[i])));
-      if (max < 8) { done(); return; }
+      for (let i = 0; i < 6; i++) max = Math.max(max, Math.abs(U.norm180(to[i] - from[i])));
       this.motion = {
-        from: from, to: home.slice(), t: 0,
-        dur: U.clamp(max / 60, 0.5, 1.8),
+        from: from.slice(), to: to.slice(), t: 0,
+        dur: U.clamp(max / 60, 0.4, 1.8),
         name: '转运折叠', pose: '', collisionClock: 0, syncClock: 0,
-        onDone: done
+        onDone: onDone
       };
       ui.setStatus('moving', '机器臂折叠转运');
       ui.markPose('');
+    },
+
+    foldToTransport(done) {
+      const robot = this.robot;
+      const from = robot.getJoints().slice();
+      const home = robot.computeTransportJoints();
+      let max = 0;
+      for (let i = 0; i < 6; i++) max = Math.max(max, Math.abs(U.norm180(home[i] - from[i])));
+      if (max < 8) { done(); return; }
+      robot.setJoints(from);
+      if (this.jointLineClear(from, home, 26)) {
+        this.startFoldMotion(from, home, done);
+        return;
+      }
+      // 先沿喷枪方向退离作业面，再折叠；避免关节直线插值扫过墙面
+      const dir = (this.pathDir || new THREE.Vector3(0, 0, -1)).clone().normalize();
+      const tcp = robot.getTCP();
+      const branches = this.pathBranch ? [this.pathBranch, -this.pathBranch] : [1, -1];
+      const retracts = [0.4, 0.65, 0.9, 1.15];
+      for (let i = 0; i < retracts.length; i++) {
+        const viaPos = tcp.position.clone().addScaledVector(dir, -retracts[i]);
+        for (let b = 0; b < branches.length; b++) {
+          const sol = robot.solveIK(viaPos, dir, from, branches[b]);
+          if (!sol || !sol.reachable) continue;
+          if (!this.jointLineClear(from, sol.angles, 30)) continue;
+          if (!this.jointLineClear(sol.angles, home, 30)) continue;
+          robot.setJoints(from);
+          this.startFoldMotion(from, sol.angles, () => this.startFoldMotion(sol.angles, home, done));
+          return;
+        }
+      }
+      const viaHome = robot.computeHomeJoints();
+      if (this.jointLineClear(from, viaHome, 30) && this.jointLineClear(viaHome, home, 30)) {
+        robot.setJoints(from);
+        this.startFoldMotion(from, viaHome, () => this.startFoldMotion(viaHome, home, done));
+        return;
+      }
+      robot.setJoints(from);
+      this.startFoldMotion(from, home, done);
     },
 
     beginBaseDrive() {

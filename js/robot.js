@@ -158,6 +158,37 @@
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.16, 0.035, 0.12), M.dark, 'chassis', [0.20, cabY0 + cabH + 0.045, cabZ - 0.10]);
     this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), M.steel, 'chassis', [-0.26, cabY0 + cabH + 0.10, cabZ - 0.14]);
 
+    /* 背部细节：后门、检修口、散热栅与把手 */
+    const rz = cabZ - cabD / 2 - 0.004;
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.72, 1.05, 0.012), M.bodyBlueDark, 'chassis', [0, cabY0 + 0.66, rz]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.76, 0.02, 0.018), M.silver, 'chassis', [0, cabY0 + 1.185, rz]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.76, 0.02, 0.018), M.silver, 'chassis', [0, cabY0 + 0.135, rz]);
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.02, 1.05, 0.018), M.silver, 'chassis', [s * 0.37, cabY0 + 0.66, rz]);
+    });
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.006, 1.02, 0.008), M.bodyBlue, 'chassis', [0.21, cabY0 + 0.66, rz - 0.006]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.012, 0.20, 0.022), M.dark, 'chassis', [0.325, cabY0 + 0.62, rz - 0.012]);
+    // 后背下部检修口 + 螺栓
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.26, 0.14, 0.012), M.bodyBlue, 'chassis', [-0.20, cabY0 + 0.34, rz - 0.004]);
+    [-1, 1].forEach((sx) => [-1, 1].forEach((sy) => {
+      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.007, 0.007, 0.006, 8), M.dark, 'chassis', [-0.20 + sx * 0.10, cabY0 + 0.34 + sy * 0.05, rz - 0.012], [Math.PI / 2, 0, 0]);
+    }));
+    // 底部白色斜撑与后部插座
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.035, 0.30, 0.03), M.white, 'chassis', [s * 0.40, 0.56, -0.58], [0.5 * s, 0, 0]);
+    });
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.09, 0.10, 0.02), M.dark, 'chassis', [0.28, 0.66, rz - 0.006]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.022, 0.022, 0.03, 12), M.steel, 'chassis', [0.28, 0.68, rz - 0.022], [Math.PI / 2, 0, 0]);
+    // 底盘后部检修板、散热栅与红色接口
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.26, 0.13, 0.012), M.bodyBlueDark, 'chassis', [-0.18, 0.27, -0.636]);
+    [-1, 1].forEach((sx) => [-1, 1].forEach((sy) => {
+      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.007, 0.007, 0.006, 8), M.dark, 'chassis', [-0.18 + sx * 0.10, 0.27 + sy * 0.045, -0.645], [Math.PI / 2, 0, 0]);
+    }));
+    for (let i = 0; i < 5; i++) {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.016, 0.085, 0.006), M.silver, 'chassis', [0.20 + i * 0.032, 0.25, -0.638], [0, 0, Math.PI / 4]);
+    }
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.06, 0.08, 0.02), M.red, 'chassis', [0.35, 0.20, -0.638]);
+
     /* 前立柱升降导轨（视觉结构，不新增运动轴） */
     const railZ = cabZ + cabD / 2 + 0.012;
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.075, 1.10, 0.028), M.dark, 'chassis', [-0.33, 1.02, railZ]);
@@ -395,10 +426,10 @@
     return [0, -35, 70, 0, -35, 0];
   };
 
-  // 转运姿态：机械臂收拢在底盘上方，避免行驶时伸向墙面
+  // 转运姿态：机械臂收拢在设备前方，避免从机柜顶部翻越造成穿模
   RobotRig.prototype.computeTransportJoints = function () {
-    const target = new THREE.Vector3(this.basePos.x, 1.95, this.basePos.z + 0.1);
-    const sol = this.solveIK(target, new THREE.Vector3(0, 0, -1), this.currentJoints);
+    const target = new THREE.Vector3(this.basePos.x, 1.4, this.basePos.z - 0.9);
+    const sol = this.solveIK(target, new THREE.Vector3(0, -1, 0), this.currentJoints);
     if (sol && sol.angles.every((v) => isFinite(v))) return sol.angles;
     return this.computeHomeJoints();
   };

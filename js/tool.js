@@ -1,5 +1,5 @@
 /* =========================================================
- * tool.js — 末端模组管理器：喷涂枪 / 刮腻子刮刀 / 打磨砂盘
+ * tool.js — 末端模组管理器：喷涂枪 / 批刮刮刀 / 打磨砂盘
  * 负责 3D 模组挂载、快速切换与作业逻辑分发
  * ========================================================= */
 (function () {
@@ -44,7 +44,7 @@
       if (!robot.toolMount) return;
       this.groups.spray = robot.nozzleGroup;
 
-      // 刮腻子刮刀：手柄 + 支架 + 宽幅刮刀片
+      // 批刮刮刀：手柄 + 支架 + 宽幅刮刀片
       const trowel = new THREE.Group();
       trowel.name = 'Tool_Trowel';
       robot.addMesh(trowel, new THREE.CylinderGeometry(0.028, 0.034, 0.16, 16), M.dark, 'nozzle', [0, 0, 0.14], [Math.PI / 2, 0, 0]);

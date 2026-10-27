@@ -173,7 +173,7 @@
       home: { target: [0.45, 1.45, -0.95], direction: [0, 0, -1] },
       joints: [
         { name: 'J1', label: '底座回转', min: -180, max: 180, speed: 70 },
-        { name: 'J2', label: '大臂俯仰', min: -120, max: 100, speed: 60 },
+        { name: 'J2', label: '大臂俯仰', min: -100, max: 100, speed: 60 },
         { name: 'J3', label: '小臂俯仰', min: -160, max: 160, speed: 65 },
         { name: 'J4', label: '腕部回转', min: -180, max: 180, speed: 90 },
         { name: 'J5', label: '腕部摆动', min: -130, max: 130, speed: 85 },
@@ -243,11 +243,11 @@
         desc: '雾化喷涂 · 面漆 / 功能涂层', usesMaterial: true
       },
       {
-        id: 'trowel', name: '刮腻子刮刀', short: '刮腻子', badge: '刮刀', verb: '刮涂',
-        desc: '宽幅刮涂 · 腻子找平', usesMaterial: true
+        id: 'trowel', name: '批刮刮刀', short: '批刮', badge: '刮刀', verb: '批刮',
+        desc: '宽幅批刮 · 腻子找平', usesMaterial: true
       },
       {
-        id: 'sander', name: '打磨砂盘', short: '打磨腻子', badge: '砂盘', verb: '打磨',
+        id: 'sander', name: '打磨砂盘', short: '打磨', badge: '砂盘', verb: '打磨',
         desc: '偏心打磨 · 去除余料与毛刺', usesMaterial: false
       }
     ],
