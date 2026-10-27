@@ -272,6 +272,8 @@
           const cy = v0 + (iy + 0.5) * cell;
           const dx = cx - u, dy = cy - v;
           if (dx * dx + dy * dy > r2) continue;
+          // 有选区时覆盖率只统计选区内的网格，避免选区外过喷虚增覆盖率
+          if (!this.inTargetRect(cx, cy)) continue;
           const key = ix * 1000 + iy;
           if (!s.covered.has(key)) {
             s.covered.add(key);
@@ -280,6 +282,12 @@
         }
       }
       return added;
+    },
+
+    inTargetRect(u, v) {
+      const tr = this.targetRect;
+      if (!tr) return true;
+      return u >= tr.minX && u <= tr.maxX && v >= tr.minY && v <= tr.maxY;
     },
 
     paintBlob(surface, u, v, radius, thickness) {
@@ -303,8 +311,8 @@
       ctx.scale(1, ry / rx);
       const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
       g.addColorStop(0, 'rgba(' + rgb + ',' + alpha.toFixed(3) + ')');
-      g.addColorStop(0.55, 'rgba(' + rgb + ',' + (alpha * 0.62).toFixed(3) + ')');
-      g.addColorStop(0.86, 'rgba(' + rgb + ',' + (alpha * 0.2).toFixed(3) + ')');
+      g.addColorStop(0.72, 'rgba(' + rgb + ',' + (alpha * 0.92).toFixed(3) + ')');
+      g.addColorStop(0.88, 'rgba(' + rgb + ',' + (alpha * 0.45).toFixed(3) + ')');
       g.addColorStop(1, 'rgba(' + rgb + ',0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -338,7 +346,10 @@
       const iy1 = Math.floor((v + hv - v0) / cell);
       let added = 0;
       for (let ix = Math.max(0, ix0); ix <= Math.min(maxIx, ix1); ix++) {
+        const cx = -halfU + (ix + 0.5) * cell;
         for (let iy = Math.max(0, iy0); iy <= Math.min(maxIy, iy1); iy++) {
+          const cy = v0 + (iy + 0.5) * cell;
+          if (!this.inTargetRect(cx, cy)) continue;
           const key = ix * 1000 + iy;
           if (!s.covered.has(key)) {
             s.covered.add(key);

@@ -1135,9 +1135,11 @@
       const sel = this.selection;
       const surface = sel.surface || this.surface;
       const fan = U.clamp(p.fanWidth || 0.3, 0.1, 0.6);
-      const gap = Math.max(0.08, fan * 0.72);
-      // 路径向选区外扩半个扇幅，保证四角与折返处被雾化锥覆盖
-      const overshoot = fan * 0.5;
+      // 行距取半扇幅，相邻行程重叠 50%，避免行间出现漏喷条纹
+      const gap = Math.max(0.05, fan * 0.5);
+      // 路径仅外扩极小余量：喷枪中心贴近选区边界，四角可获得完整雾化覆盖，
+      // 同时避免因外扩过多导致边界点超出机械臂可达范围
+      const overshoot = Math.min(0.04, fan * 0.12);
       const halfU = (surface === 'wall' ? C.room.wallWidth : C.room.width) / 2;
       const vLimit = surface === 'wall'
         ? { min: 0.08, max: C.room.wallHeight - 0.08 }
@@ -1520,12 +1522,9 @@
       }
     },
 
-    beginPathMotion() {
-      const ui = SB.UI;
-      if (!this.path || this.path.length < 2) return;
-      const from = this.robot.getJoints().slice();
-      const to = this.path[0].angles.slice();
-      const segments = this.planApproach(from, to).map((seg) => {
+    // 关节空间接近路径：返回带时长的分段，供起始接近与断点返回复用
+    approachSegments(from, to) {
+      return this.planApproach(from, to).map((seg) => {
         let dur = 0;
         seg.from.forEach((v, i) => {
           const delta = Math.abs(U.norm180(seg.to[i] - v));
@@ -1533,11 +1532,21 @@
         });
         return { from: seg.from, to: seg.to, dur: U.clamp(dur * 1.5, 0.35, 4) };
       });
+    },
+
+    beginPathMotion() {
+      const ui = SB.UI;
+      if (!this.path || this.path.length < 2) return;
+      const from = this.robot.getJoints().slice();
+      const to = this.path[0].angles.slice();
+      const segments = this.approachSegments(from, to);
       const first = segments[0];
       this.pathRun = {
         phase: 'approach', approachIndex: 0, segments: segments,
         t: 0, dur: first.dur, from: first.from, to: first.to,
-        index: 0, segT: 0, travel: 0, syncClock: 0, collisionClock: 0
+        index: 0, segT: 0, travel: 0,
+        startIndex: 0, startFrac: 0, startTravel: 0,
+        syncClock: 0, collisionClock: 0
       };
       this.state = 'moving';
       ui.setStatus('moving', '底盘已到位 · 正接近作业起始点');
@@ -1585,12 +1594,14 @@
             return;
           }
           pr.phase = 'work';
-          pr.index = 0;
-          pr.segT = 0;
+          pr.index = U.clamp(pr.startIndex || 0, 0, this.path.length - 2);
+          pr.segT = pr.startSegT || 0;
+          pr.travel = pr.startTravel != null ? pr.startTravel : this.pathCum[pr.index];
+          pr.collisionClock = 0;
           this.state = 'spraying';
           ui.setStatus('spraying', 'S 路径' + this.toolVerb() + '中');
           this.setSpray(true, true);
-          ui.log('已到达起始点，' + this.toolName() + '开启', 'ok');
+          ui.log('已到达' + (pr.resume ? '断点位姿，从断点继续' : '起始点') + this.toolName() + '开启', 'ok');
         }
         return;
       }
@@ -1677,9 +1688,18 @@
 
     captureResumeState(reason) {
       const pr = this.pathRun;
-      if (!pr || pr.phase !== 'work' || !this.path || !this.pathCum || this.path.length < 2) return false;
-      const index = U.clamp(pr.index, 0, this.path.length - 2);
-      const travel = U.clamp(pr.travel || this.pathCum[index], 0, this.pathLength);
+      if (!pr || !this.path || !this.pathCum || this.path.length < 2) return false;
+      const inWork = pr.phase === 'work';
+      if (!inWork && pr.startIndex == null) return false;
+      const index = U.clamp(inWork ? pr.index : pr.startIndex, 0, this.path.length - 2);
+      const segLen = Math.max(1e-4, this.pathCum[index + 1] - this.pathCum[index]);
+      const segDur = Math.max(1e-4, segLen / U.clamp(this.params.speed || 0.5, 0.05, 1.2),
+        (this.pathJointDur && this.pathJointDur[index + 1]) || 0);
+      // 记录当前段内的归一化进度，恢复时按新参数换算回段内时间
+      const frac = inWork ? U.clamp((pr.segT || 0) / segDur, 0, 1) : U.clamp(pr.startFrac || 0, 0, 1);
+      const travel = inWork
+        ? U.clamp(pr.travel || this.pathCum[index], 0, this.pathLength)
+        : U.clamp(pr.startTravel != null ? pr.startTravel : this.pathCum[index] + segLen * frac, 0, this.pathLength);
       this.resumeState = {
         reason: reason || '任务中止',
         path: this.path,
@@ -1690,6 +1710,7 @@
         pathBase: this.pathBase ? Object.assign({}, this.pathBase) : null,
         pathRoute: this.pathRoute ? this.pathRoute.slice() : null,
         index: index,
+        frac: frac,
         travel: travel,
         selection: this.selection ? U.clone(this.selection) : null,
         surface: this.surface,
@@ -1739,23 +1760,63 @@
       this.scene.showPath(this.path);
       if (this.pathBase) this.robot.setBasePose(this.pathBase.x, this.pathBase.z, this.pathBase.yaw);
       const index = U.clamp(rs.index, 0, this.path.length - 2);
-      this.robot.setJoints(this.path[index].angles);
-      this.lastSafeJoints = this.robot.getJoints();
-      ui.syncJoints(this.lastSafeJoints);
-      this.pathRun = {
-        phase: 'work', index: index, segT: 0,
-        travel: this.pathCum[index], syncClock: 0, collisionClock: 0
-      };
-      this.state = 'spraying';
+      const frac = U.clamp(rs.frac || 0, 0, 1);
+      const a = this.path[index].angles;
+      const b = this.path[index + 1].angles;
+      const targetPose = U.lerpJoints(a, b, frac);
+      const segLen = Math.max(1e-4, this.pathCum[index + 1] - this.pathCum[index]);
+      const segDur = Math.max(1e-4, segLen / U.clamp(this.params.speed || 0.5, 0.05, 1.2),
+        (this.pathJointDur && this.pathJointDur[index + 1]) || 0);
+      const travel = U.clamp(rs.travel != null ? rs.travel : this.pathCum[index] + segLen * frac, 0, this.pathLength);
+      const pct = Math.round((travel / Math.max(0.001, this.pathLength)) * 100);
+      const from = this.robot.getJoints().slice();
+      let maxDelta = 0;
+      for (let i = 0; i < 6; i++) maxDelta = Math.max(maxDelta, Math.abs(U.norm180(targetPose[i] - from[i])));
+
+      this.setSpray(false, true);
+      this.state = 'moving';
       this.scene.setFollow(true, true);
       ui.setTimer(this.taskTime);
-      ui.setStatus('spraying', '从断点继续' + this.toolVerb() + '中');
       ui.setInterlock(true, '自动作业进行中');
       ui.setPathButtons({ hasPath: true, hasSelection: !!this.selection, running: true });
-      const pct = Math.round((this.pathCum[index] / Math.max(0.001, this.pathLength)) * 100);
+      this.lastSafeJoints = from.slice();
+
+      // 若急停后已复位姿态，先沿安全路径返回断点位姿，再开启喷涂
+      if (maxDelta > 6) {
+        const segments = this.approachSegments(from, targetPose);
+        if (segments.length && segments[0]) {
+          const first = segments[0];
+          this.pathRun = {
+            phase: 'approach', approachIndex: 0, segments: segments,
+            t: 0, dur: first.dur, from: first.from, to: first.to,
+            index: index, segT: segDur * frac, travel: travel,
+            startIndex: index, startFrac: frac, startSegT: segDur * frac, startTravel: travel,
+            resume: true, syncClock: 0, collisionClock: 0
+          };
+          ui.setStatus('moving', '正在返回断点位姿');
+          ui.setSelectInfo('返回断点 · ' + pct + '%');
+          ui.log('系统复位完成，机械臂正返回断点位姿 · ' + pct + '%', 'ok');
+          ui.toast('正在返回断点位姿，到达后自动继续作业', 'info');
+          this.resumeState = null;
+          ui.setResumeAvailable(false);
+          return;
+        }
+      }
+
+      this.robot.setJoints(targetPose);
+      this.lastSafeJoints = targetPose.slice();
+      ui.syncJoints(this.lastSafeJoints);
+      this.pathRun = {
+        phase: 'work', index: index, segT: segDur * frac,
+        travel: travel, startIndex: index, startFrac: frac,
+        startSegT: segDur * frac, startTravel: travel,
+        syncClock: 0, collisionClock: 0
+      };
+      this.state = 'spraying';
+      ui.setStatus('spraying', '从断点继续' + this.toolVerb() + '中');
       ui.setSelectInfo('从断点继续 · ' + pct + '%');
       this.setSpray(true, true);
-      ui.log('从断点继续作业 · ' + this.pathCum[index].toFixed(2) + ' / ' + this.pathLength.toFixed(2) + ' m', 'ok');
+      ui.log('从断点继续作业 · ' + travel.toFixed(2) + ' / ' + this.pathLength.toFixed(2) + ' m', 'ok');
       ui.toast('已从断点继续作业', 'ok');
       this.resumeState = null;
       ui.setResumeAvailable(false);
