@@ -31,6 +31,7 @@
     baseDrive: null,
     pathBase: null,
     pathRoute: null,
+    resumeState: null,
     selection: null,
     selectionMode: false,
     drag: null,
@@ -329,6 +330,7 @@
       on('btnSelectArea', 'click', () => this.toggleSelectionMode());
       on('btnGenPath', 'click', () => this.buildPath());
       on('btnRunPath', 'click', () => this.startPathRun());
+      on('btnResumePath', 'click', () => this.resumePathRun());
 
       const viewSwitch = $('viewSwitch');
       if (viewSwitch) {
@@ -586,6 +588,7 @@
     onMaterial(id) {
       const mat = C.materials[id];
       if (!mat) return;
+      if (this.resumeState && this.resumeState.materialId !== id) this.clearResume();
       this.materialId = id;
       this.params = U.clone(mat.defaults);
       SB.UI.setParams(this.params, id);
@@ -786,6 +789,7 @@
       this.pathBase = null;
       this.pathRoute = null;
       this.baseDrive = null;
+      this.clearResume();
       this.spray.rebuild();
       this.syncInventoryFromTank();
       this.surface = 'wall';
@@ -907,6 +911,7 @@
       ui.setSelectionActive(false);
       this.scene.controls.enabled = true;
       this.scene.clearPlanning(true);
+      this.clearResume();
       this.selection = null;
       this.path = null;
       this.pathCum = null;
@@ -1131,10 +1136,16 @@
       const surface = sel.surface || this.surface;
       const fan = U.clamp(p.fanWidth || 0.3, 0.1, 0.6);
       const gap = Math.max(0.08, fan * 0.72);
-      let minU = sel.minX + fan * 0.3;
-      let maxU = sel.maxX - fan * 0.3;
-      let minV = sel.minY + fan * 0.3;
-      let maxV = sel.maxY - fan * 0.3;
+      // 路径向选区外扩半个扇幅，保证四角与折返处被雾化锥覆盖
+      const overshoot = fan * 0.5;
+      const halfU = (surface === 'wall' ? C.room.wallWidth : C.room.width) / 2;
+      const vLimit = surface === 'wall'
+        ? { min: 0.08, max: C.room.wallHeight - 0.08 }
+        : { min: -C.room.depth / 2 + 0.05, max: C.room.depth / 2 - 0.05 };
+      let minU = U.clamp(sel.minX - overshoot, -halfU + 0.02, halfU - 0.02);
+      let maxU = U.clamp(sel.maxX + overshoot, -halfU + 0.02, halfU - 0.02);
+      let minV = U.clamp(sel.minY - overshoot, vLimit.min, vLimit.max);
+      let maxV = U.clamp(sel.maxY + overshoot, vLimit.min, vLimit.max);
       if (maxU - minU < 0.12) { minU = sel.minX; maxU = sel.maxX; }
       if (maxV - minV < 0.12) { minV = sel.minY; maxV = sel.maxY; }
       const distance = U.clamp(p.distance || 0.3, 0.14, 0.65);
@@ -1268,6 +1279,7 @@
         this.pathJointDur[i] = Math.min(2.5, dur);
       }
       this.scene.showPath(list);
+      this.clearResume();
       ui.setPathButtons({ hasPath: true, hasSelection: true, running: false });
       const driveDist = this.routeLength(bestOverall.route);
       const est = this.estimatePathTime(p.speed) + driveDist / C.baseSpeed;
@@ -1303,12 +1315,14 @@
         this.baseDrive = null;
       }
       if (this.pathRun) {
+        if (!clearSelection) this.captureResumeState('手动停止');
         this.pathRun = null;
         this.setSpray(false, true);
         this.state = 'ready';
         ui.setStatus('ready', '作业任务已终止');
         ui.setInterlock(false);
       }
+      if (clearSelection) this.clearResume();
       this.scene.clearPlanning(!!clearSelection);
       this.path = null;
       this.pathCum = null;
@@ -1418,6 +1432,7 @@
       }
       this.setSpray(false, true);
       this.scene.setFollow(true, true);
+      this.clearResume();
       this.taskTime = 0;
       ui.setTimer(0);
       this.state = 'moving';
@@ -1632,6 +1647,7 @@
 
     finishPathRun(aborted, reason) {
       if (!this.pathRun) return;
+      const saved = aborted ? this.captureResumeState(reason) : false;
       this.pathRun = null;
       const ui = SB.UI;
       this.setSpray(false, true);
@@ -1641,16 +1657,110 @@
       ui.setPathButtons({ hasPath: !!this.path, hasSelection: !!this.selection, running: false });
       ui.syncJoints(this.robot.getJoints());
       if (aborted) {
-        ui.setSelectInfo('任务已终止 · ' + (reason || ''));
-        ui.toast(this.toolVerb() + '任务已停止：' + (reason || '任务终止'), 'warn');
-        ui.log('S 路径' + this.toolVerb() + '中止：' + (reason || '任务终止'), 'warn');
+        if (!saved) this.clearResume();
+        ui.setSelectInfo('任务已暂停 · 可继续未完成区域');
+        ui.toast(this.toolVerb() + '任务已暂停：' + (reason || '任务终止') + (saved ? '，处理后点「继续作业」' : ''), 'warn');
+        ui.log('S 路径' + this.toolVerb() + '中止：' + (reason || '任务终止') + (saved ? '，已保存断点' : ''), 'warn');
       } else {
+        this.clearResume();
         ui.setSelectInfo(this.toolVerb() + '完成 · 覆盖率 ' + this.spray.coverage.toFixed(1) + '%');
         ui.log('S 路径' + this.toolVerb() + '完成 · 覆盖 ' + this.spray.area.toFixed(2) + ' ㎡，耗料 ' + this.spray.consumption.toFixed(2) + ' L', 'ok');
         ui.toast(this.toolVerb() + '任务完成', 'ok');
         this.showStats();
       }
     },
+
+    clearResume() {
+      this.resumeState = null;
+      SB.UI.setResumeAvailable(false);
+    },
+
+    captureResumeState(reason) {
+      const pr = this.pathRun;
+      if (!pr || pr.phase !== 'work' || !this.path || !this.pathCum || this.path.length < 2) return false;
+      const index = U.clamp(pr.index, 0, this.path.length - 2);
+      const travel = U.clamp(pr.travel || this.pathCum[index], 0, this.pathLength);
+      this.resumeState = {
+        reason: reason || '任务中止',
+        path: this.path,
+        pathCum: this.pathCum.slice(),
+        pathJointDur: this.pathJointDur ? this.pathJointDur.slice() : null,
+        pathDir: this.pathDir,
+        pathLength: this.pathLength,
+        pathBase: this.pathBase ? Object.assign({}, this.pathBase) : null,
+        pathRoute: this.pathRoute ? this.pathRoute.slice() : null,
+        index: index,
+        travel: travel,
+        selection: this.selection ? U.clone(this.selection) : null,
+        surface: this.surface,
+        params: U.clone(this.params),
+        materialId: this.materialId,
+        toolId: SB.Tools ? SB.Tools.active : 'spray',
+        taskTime: this.taskTime || 0
+      };
+      SB.UI.setResumeAvailable(true, this.resumeState);
+      return true;
+    },
+
+    resumePathRun() {
+      const ui = SB.UI;
+      const rs = this.resumeState;
+      if (!rs) { ui.toast('没有可继续的作业', 'info'); return; }
+      if (this.isLocked() || this.isBusy()) return;
+      if (rs.materialId !== this.materialId) {
+        this.clearResume();
+        ui.toast('涂料已更换，断点已失效，请重新生成路径', 'warn');
+        return;
+      }
+      if (rs.toolId && SB.Tools && SB.Tools.active !== rs.toolId) {
+        this.clearResume();
+        ui.toast('末端模组已更换，断点已失效，请重新生成路径', 'warn');
+        return;
+      }
+      if (this.toolUsesMaterial() && this.spray.tank <= 1) {
+        ui.toast('料桶余量不足，请先补充涂料再继续', 'warn');
+        return;
+      }
+      this.selection = rs.selection ? U.clone(rs.selection) : null;
+      this.surface = rs.surface || 'wall';
+      this.scene.surface = this.surface;
+      this.spray.setSurface(this.surface);
+      this.spray.setTargetRect(this.selection, this.surface);
+      this.path = rs.path;
+      this.pathCum = rs.pathCum.slice();
+      this.pathJointDur = rs.pathJointDur ? rs.pathJointDur.slice() : null;
+      this.pathDir = rs.pathDir;
+      this.pathLength = rs.pathLength;
+      this.pathBase = rs.pathBase ? Object.assign({}, rs.pathBase) : null;
+      this.pathRoute = rs.pathRoute ? rs.pathRoute.slice() : [];
+      this.taskTime = rs.taskTime || 0;
+      this.setSurfaceUI(this.surface);
+      if (this.selection) this.scene.setSelection(this.selection, this.surface);
+      this.scene.showPath(this.path);
+      if (this.pathBase) this.robot.setBasePose(this.pathBase.x, this.pathBase.z, this.pathBase.yaw);
+      const index = U.clamp(rs.index, 0, this.path.length - 2);
+      this.robot.setJoints(this.path[index].angles);
+      this.lastSafeJoints = this.robot.getJoints();
+      ui.syncJoints(this.lastSafeJoints);
+      this.pathRun = {
+        phase: 'work', index: index, segT: 0,
+        travel: this.pathCum[index], syncClock: 0, collisionClock: 0
+      };
+      this.state = 'spraying';
+      this.scene.setFollow(true, true);
+      ui.setTimer(this.taskTime);
+      ui.setStatus('spraying', '从断点继续' + this.toolVerb() + '中');
+      ui.setInterlock(true, '自动作业进行中');
+      ui.setPathButtons({ hasPath: true, hasSelection: !!this.selection, running: true });
+      const pct = Math.round((this.pathCum[index] / Math.max(0.001, this.pathLength)) * 100);
+      ui.setSelectInfo('从断点继续 · ' + pct + '%');
+      this.setSpray(true, true);
+      ui.log('从断点继续作业 · ' + this.pathCum[index].toFixed(2) + ' / ' + this.pathLength.toFixed(2) + ' m', 'ok');
+      ui.toast('已从断点继续作业', 'ok');
+      this.resumeState = null;
+      ui.setResumeAvailable(false);
+    },
+
     recordPoint() {
       const ui = SB.UI;
       if (this.isLocked()) return;
@@ -1793,6 +1903,7 @@
       return data;
     },
     stopAll() {
+      if (this.pathRun) this.captureResumeState('急停/故障');
       this.motion = null;
       this.pathRun = null;
       this.baseDrive = null;

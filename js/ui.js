@@ -887,6 +887,20 @@
       const clear = $('btnClearPath');
       if (run) run.disabled = !opts.hasPath || !!opts.running || this.locked;
       if (clear) clear.disabled = !opts.hasPath && !opts.hasSelection;
+      if (opts.running) this.setResumeAvailable(false);
+    },
+
+    setResumeAvailable(on, state) {
+      const btn = $('btnResumePath');
+      if (!btn) return;
+      btn.hidden = !on;
+      btn.classList.toggle('hidden', !on);
+      if (on && state && state.pathLength > 0) {
+        const pct = Math.round(U.clamp((state.travel || 0) / state.pathLength, 0, 1) * 100);
+        btn.textContent = '继续作业 ' + pct + '%';
+      } else if (on) {
+        btn.textContent = '继续作业';
+      }
     },
 
     openModal(id) {

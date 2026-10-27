@@ -74,7 +74,7 @@
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = Math.min(8, this.sceneMgr.renderer.capabilities.getMaxAnisotropy());
       const mat = new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, depthWrite: false, toneMapped: false,
+        map: tex, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
         polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
       });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wm, hm), mat);

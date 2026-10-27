@@ -245,6 +245,7 @@
       ceiling.receiveShadow = true;
       group.add(ceiling);
       this._ceilingMat = ceilingMat;
+      this._ceilingMesh = ceiling;
 
       const add = (geo, mat, x, y, z, cast, receive) => {
         const m = new THREE.Mesh(geo, mat);
@@ -764,12 +765,13 @@
     },
     setView(name, instant) {
       if (name !== 'follow' && this.follow) this.setFollow(false, true);
+      if (this._ceilingMesh) this._ceilingMesh.visible = name !== 'ceiling';
       const R = C.room;
       const presets = {
         overview: { pos: [R.width * 0.34, R.height * 0.95, R.depth * 0.34], target: [0, R.height * 0.35, -R.depth * 0.18] },
         arm: { pos: [R.width * 0.22, R.height * 0.72, R.depth * 0.28], target: [0, R.height * 0.45, -R.depth * 0.30] },
         wall: { pos: [R.width * 0.20, R.height * 0.60, R.depth * 0.30], target: [0, R.height * 0.55, R.wallZ] },
-        ceiling: { pos: [R.width * 0.16, R.height * 0.55, R.depth * 0.30], target: [0, R.height * 0.9, -R.depth * 0.1] },
+        ceiling: { pos: [R.width * 0.34, R.height + 2.8, R.depth * 0.34], target: [0, R.height, -R.depth * 0.04] },
         floor: { pos: [R.width * 0.16, R.height * 0.85, R.depth * 0.30], target: [0, 0, -R.depth * 0.05] }
       };
       const p = presets[name] || presets.overview;
