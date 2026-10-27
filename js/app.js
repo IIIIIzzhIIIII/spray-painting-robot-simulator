@@ -1216,6 +1216,12 @@
       const surface = sel.surface || this.surface;
       const savedBase = this.robot.getBasePose();
       const startJoints = this.robot.getJoints().slice();
+      // 规划期间会临时把底盘/关节移到各候选位姿，结束后必须恢复到用户当前位姿
+      const restorePose = () => {
+        this.robot.setBasePose(savedBase.x, savedBase.z, savedBase.yaw);
+        this.robot.setJoints(startJoints);
+        this.lastSafeJoints = startJoints.slice();
+      };
       const single = this.planRect(surface, sel, savedBase, startJoints);
       let jobs = [];
       let panelized = false;
@@ -1246,12 +1252,14 @@
         if (!jobs.length && single) jobs = [single];
       }
       if (!jobs.length) {
+        restorePose();
         ui.toast('无法生成有效路径，请扩大选区或调整喷涂距离', 'error');
         return;
       }
       this.pathJobs = jobs;
       this.taskTotalLength = jobs.reduce((s, j) => s + j.length, 0);
       this.applyJob(0);
+      restorePose();
       this.scene.showPaths(jobs.map((j) => j.path));
       this.clearResume();
       ui.setPathButtons({ hasPath: true, hasSelection: true, running: false });
