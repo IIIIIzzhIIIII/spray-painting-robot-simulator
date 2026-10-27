@@ -1061,6 +1061,34 @@ input[type="range"].invalid::-webkit-slider-runnable-track { background: linear-
 }
 .share-tip { font-size: 10.5px; line-height: 1.65; color: var(--muted); text-align: center; }
 
+/* ============ QZ-01 实景模型查看器 ============ */
+.real-model-modal { width: min(1080px, 96vw); }
+.real-model-body { padding: 0; display: flex; flex-direction: column; }
+.real-model-stage {
+  position: relative;
+  height: clamp(320px, 58dvh, 600px);
+  background: #0d1726;
+  overflow: hidden;
+}
+.real-model-stage canvas { display: block; width: 100%; height: 100%; }
+.real-model-loading {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 20px;
+  color: #dbe7f6; font-size: 13px;
+  background: rgba(8, 18, 32, .72);
+  text-align: center;
+}
+.real-model-meta {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
 /* ============ Animations ============ */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-7px) scale(.98); } to { opacity: 1; transform: none; } }
@@ -1362,6 +1390,8 @@ input[type="range"].invalid::-webkit-slider-runnable-track { background: linear-
   .share-url { padding: 6px 8px; font-size: 9.5px; }
   .share-body .btn { min-height: 32px; font-size: 11px; }
   .share-tip { font-size: 9.5px; line-height: 1.45; }
+  .real-model-stage { height: calc(96dvh - 150px); min-height: 180px; }
+  .real-model-meta { font-size: 9.5px; padding: 7px 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

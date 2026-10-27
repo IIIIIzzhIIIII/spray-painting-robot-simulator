@@ -161,6 +161,8 @@
           <input type="file" id="glbFile" accept=".glb,.gltf" hidden>
           <div class="note-box" id="modelStatus">当前模型：内置六轴工业机械臂</div>
           <p class="tiny">模型约定：Y 轴向上、单位米、Z 轴朝前，节点名为 J1–J6。详见 models/README.md。</p>
+          <button class="btn btn-primary full mt-10" id="btnRealModel">查看 QZ-01 真实设备模型</button>
+          <p class="tiny">实景装配模型用于外观与结构确认，当前为静态模型。</p>
 
           <div class="section-head mt-18">
             <h2>表面涂层</h2>
@@ -388,6 +390,25 @@
   </div>
 </div>
 
+<div class="modal-mask hidden" id="realModelModal">
+  <div class="modal real-model-modal">
+    <div class="modal-head">
+      <h3>QZ-01 真实设备模型</h3>
+      <button class="modal-close" data-close="realModelModal">×</button>
+    </div>
+    <div class="modal-body real-model-body">
+      <div class="real-model-stage">
+        <canvas id="realModelCanvas"></canvas>
+        <div class="real-model-loading" id="realModelLoading">正在加载真实模型…</div>
+      </div>
+      <div class="real-model-meta" id="realModelMeta">模型信息加载中…</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" data-close="realModelModal">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-mask hidden" id="shareModal">
   <div class="modal share-modal">
     <div class="modal-head"><h3>分享访问二维码</h3><button class="modal-close" data-close="shareModal">×</button></div>
@@ -454,6 +475,7 @@
 <script src="js/lib/BufferGeometryUtils.js"></script>
 <script src="js/lib/OrbitControls.js"></script>
 <script src="js/lib/GLTFLoader.js"></script>
+<script src="js/lib/DRACOLoader.js"></script>
 <script src="js/lib/vue.global.prod.js"></script>
 <script src="js/lib/element-plus.full.min.js"></script>
 <script src="js/lib/element-plus.zh-cn.min.js"></script>
@@ -466,6 +488,7 @@
 <script src="js/tool.js"></script>
 <script src="js/nozzle.js"></script>
 <script src="js/teach.js"></script>
+<script src="js/realmodel.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
