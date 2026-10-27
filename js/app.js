@@ -1483,6 +1483,19 @@
       return true;
     },
 
+    // 折叠/转运专用：同时检查环境碰撞与机械臂对机柜/底盘的自身碰撞
+    foldLineClear(from, to, steps) {
+      const n = Math.max(2, steps || 30);
+      for (let i = 0; i <= n; i++) {
+        const u = i / n;
+        this.robot.setJoints(U.lerpJoints(from, to, u));
+        const pts = this.robot.getSamplePoints();
+        if (this.scene.checkCollision(pts, 0.03).hit) return false;
+        if (this.robot.bodyCollision(pts, 0.04).hit) return false;
+      }
+      return true;
+    },
+
     // 从当前位形接近路径起点。直线接近若穿墙，则先沿法线退让再进入起点。
     planApproach(from, to) {
       const direct = [{ from: from.slice(), to: to.slice() }];
@@ -1607,7 +1620,7 @@
       for (let i = 0; i < 6; i++) max = Math.max(max, Math.abs(U.norm180(home[i] - from[i])));
       if (max < 8) { done(); return; }
       robot.setJoints(from);
-      if (this.jointLineClear(from, home, 26)) {
+      if (this.foldLineClear(from, home, 30)) {
         this.startFoldMotion(from, home, done);
         return;
       }
@@ -1621,15 +1634,15 @@
         for (let b = 0; b < branches.length; b++) {
           const sol = robot.solveIK(viaPos, dir, from, branches[b]);
           if (!sol || !sol.reachable) continue;
-          if (!this.jointLineClear(from, sol.angles, 30)) continue;
-          if (!this.jointLineClear(sol.angles, home, 30)) continue;
+          if (!this.foldLineClear(from, sol.angles, 30)) continue;
+          if (!this.foldLineClear(sol.angles, home, 30)) continue;
           robot.setJoints(from);
           this.startFoldMotion(from, sol.angles, () => this.startFoldMotion(sol.angles, home, done));
           return;
         }
       }
       const viaHome = robot.computeHomeJoints();
-      if (this.jointLineClear(from, viaHome, 30) && this.jointLineClear(viaHome, home, 30)) {
+      if (this.foldLineClear(from, viaHome, 30) && this.foldLineClear(viaHome, home, 30)) {
         robot.setJoints(from);
         this.startFoldMotion(from, viaHome, () => this.startFoldMotion(viaHome, home, done));
         return;

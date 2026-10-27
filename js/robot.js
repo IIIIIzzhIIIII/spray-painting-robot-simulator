@@ -382,18 +382,45 @@
       add(this.jointGroups[4]);
       add(this.jointGroups[5]);
       add(this.tcpRef || this.tcp);
-      const p1 = new THREE.Vector3(), p2 = new THREE.Vector3();
-      this.jointGroups[1].getWorldPosition(p1);
-      this.jointGroups[2].getWorldPosition(p2);
-      pts.push(p1.clone().lerp(p2, 0.5));
-      this.jointGroups[2].getWorldPosition(p1);
-      this.jointGroups[3].getWorldPosition(p2);
-      pts.push(p1.clone().lerp(p2, 0.5));
-      this.jointGroups[3].getWorldPosition(p1);
-      this.jointGroups[4].getWorldPosition(p2);
-      pts.push(p1.clone().lerp(p2, 0.5));
+      // 沿大臂、小臂、腕部加密采样，避免长连杆中段穿墙/穿机体被漏检
+      const linkSample = (a, b, ts) => {
+        const p1 = new THREE.Vector3(), p2 = new THREE.Vector3();
+        a.getWorldPosition(p1);
+        b.getWorldPosition(p2);
+        ts.forEach((t) => pts.push(p1.clone().lerp(p2, t)));
+      };
+      linkSample(this.jointGroups[1], this.jointGroups[2], [0.2, 0.4, 0.6, 0.8]);
+      linkSample(this.jointGroups[2], this.jointGroups[3], [0.25, 0.5, 0.75]);
+      linkSample(this.jointGroups[3], this.jointGroups[4], [0.5]);
+      linkSample(this.jointGroups[4], this.jointGroups[5], [0.5]);
+      linkSample(this.jointGroups[5], this.tcpRef || this.tcp, [0.5]);
     }
     return pts;
+  };
+
+  // 机体自身碰撞：机柜、底盘、前托板（局部坐标包围盒）
+  RobotRig.prototype.bodyCollision = function (points, margin) {
+    if (!this.bodyBoxes) {
+      this.bodyBoxes = [
+        { name: '机柜', min: [-0.44, 0.44, -0.63], max: [0.44, 1.72, -0.10] },
+        { name: '底盘', min: [-0.47, 0.05, -0.66], max: [0.47, 0.455, 0.66] },
+        { name: '前托板', min: [-0.33, 0.43, -0.09], max: [0.33, 0.49, 0.42] }
+      ];
+    }
+    const m = margin == null ? 0.04 : margin;
+    this.root.updateMatrixWorld(true);
+    for (let i = 0; i < points.length; i++) {
+      const q = this.root.worldToLocal(points[i].clone());
+      for (let b = 0; b < this.bodyBoxes.length; b++) {
+        const box = this.bodyBoxes[b];
+        if (q.x > box.min[0] - m && q.x < box.max[0] + m &&
+          q.y > box.min[1] - m && q.y < box.max[1] + m &&
+          q.z > box.min[2] - m && q.z < box.max[2] + m) {
+          return { hit: true, reason: box.name, point: points[i] };
+        }
+      }
+    }
+    return { hit: false };
   };
 
   RobotRig.prototype.setLayer = function (name, visible) {
