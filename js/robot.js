@@ -137,6 +137,64 @@
     return tex;
   };
 
+  RobotRig.prototype.makeScreenTexture = function () {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 160;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#081521';
+    ctx.fillRect(0, 0, 256, 160);
+    const g = ctx.createLinearGradient(0, 0, 0, 54);
+    g.addColorStop(0, '#0d6fb5');
+    g.addColorStop(1, '#084a7d');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 54);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px "Microsoft YaHei", Arial';
+    ctx.fillText('QZ-1', 14, 34);
+    ctx.fillStyle = '#bfe2ff';
+    ctx.font = '13px "Microsoft YaHei", Arial';
+    ctx.fillText('功能性涂层施工机器人', 14, 50);
+    const rows = [['运行状态', '正常'], ['系统压力', '0.42 MPa'], ['涂料余量', '86 %'], ['作业模式', '自动']];
+    ctx.font = '14px "Microsoft YaHei", Arial';
+    rows.forEach((row, i) => {
+      const y = 82 + i * 20;
+      ctx.fillStyle = '#9fb4c6';
+      ctx.fillText(row[0], 16, y);
+      ctx.fillStyle = i === 0 ? '#3ade8a' : '#e8f1f8';
+      ctx.textAlign = 'right';
+      ctx.fillText(row[1], 200, y);
+      ctx.textAlign = 'left';
+    });
+    ctx.fillStyle = '#3ade8a';
+    ctx.beginPath(); ctx.arc(222, 30, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1b3b52';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < 160; y += 8) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+
+  RobotRig.prototype.makeEstopTexture = function () {
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 34;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#f2c200';
+    ctx.fillRect(0, 0, 128, 34);
+    ctx.strokeStyle = '#161a20';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, 124, 30);
+    ctx.fillStyle = '#161a20';
+    ctx.font = 'bold 16px "Microsoft YaHei", Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('急停 E-STOP', 64, 23);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+
   RobotRig.prototype.buildChassis = function () {
     const M = this.materials;
     this.chassisGroup = new THREE.Group();
@@ -289,8 +347,8 @@
     this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.34, 0.085), brandMat, 'chassis',
       [0, cabY0 + 0.95, rz - 0.009], [0, Math.PI, 0]);
     // 侧出管口
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.048, 0.048, 0.06, 16), M.steel, 'chassis', [0.455, 0.78, -0.30], [0, 0, Math.PI / 2]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), M.dark, 'chassis', [0.49, 0.78, -0.30], [0, 0, Math.PI / 2]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.03, 0.03, 0.05, 16), M.steel, 'chassis', [0.455, 0.78, -0.30], [0, 0, Math.PI / 2]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.017, 0.017, 0.018, 12), M.dark, 'chassis', [0.485, 0.78, -0.30], [0, 0, Math.PI / 2]);
     // 门铰链、锁扣与尾部警示条
     [-1, 1].forEach((s) => {
       [cabY0 + 0.15, cabY0 + 1.13].forEach((y) => {
@@ -302,6 +360,21 @@
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.03, 0.04, 0.02), M.dark, 'chassis', [0.40, cabY0 + 0.62, cabZ + 0.23]);
     const warnMat = new THREE.MeshStandardMaterial({ map: this.makeWarningTexture(), roughness: 0.55, metalness: 0.05 });
     this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.54, 0.11), warnMat, 'chassis', [0, 0.34, -0.636], [0, Math.PI, 0]);
+    // 后部显示屏、状态灯与急停按钮
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.40, 0.26, 0.03), M.dark, 'chassis', [0, cabY0 + 0.72, rz - 0.014]);
+    const screenMat = new THREE.MeshBasicMaterial({ map: this.makeScreenTexture() });
+    this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.355, 0.215), screenMat, 'chassis', [0, cabY0 + 0.72, rz - 0.031], [0, Math.PI, 0]);
+    [-0.13, 0, 0.13].forEach((x, i) => {
+      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.012, 0.012, 0.012, 10), [M.led, M.amber, M.red][i], 'chassis', [x, cabY0 + 0.54, rz - 0.026], [Math.PI / 2, 0, 0]);
+    });
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.072, 0.072, 0.022, 20), M.yellow, 'chassis', [0.30, cabY0 + 0.48, rz - 0.028], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.055, 0.055, 0.038, 20), M.dark, 'chassis', [0.30, cabY0 + 0.48, rz - 0.050], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.054, 0.058, 0.03, 20), M.red, 'chassis', [0.30, cabY0 + 0.48, rz - 0.072], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.SphereGeometry(0.056, 20, 12), M.red, 'chassis', [0.30, cabY0 + 0.48, rz - 0.087]);
+    const estopMat = new THREE.MeshBasicMaterial({ map: this.makeEstopTexture() });
+    this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.19, 0.05), estopMat, 'chassis', [0.30, cabY0 + 0.38, rz - 0.017], [0, Math.PI, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.024, 0.024, 0.02, 16), M.steel, 'chassis', [-0.32, cabY0 + 0.48, rz - 0.028], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.018, 0.018, 0.022, 16), M.led, 'chassis', [-0.32, cabY0 + 0.48, rz - 0.046], [Math.PI / 2, 0, 0]);
     // 顶部橙色警示灯
     this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.052, 0.058, 0.028, 18), M.steel, 'chassis', [0.30, cabY0 + cabH + 0.014, cabZ]);
     this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.045, 0.045, 0.065, 18), M.amber, 'chassis', [0.30, cabY0 + cabH + 0.058, cabZ]);
@@ -460,6 +533,30 @@
     this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.036, 0.028, 0.05), M.dark, 'nozzle', [0.045, 0.056, 0.195]);
     this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.008, 0.008, 0.012, 10), M.laser, 'nozzle', [0.045, 0.056, 0.226], [Math.PI / 2, 0, 0]);
 
+    /* 喷枪精细件：调节旋钮、扳机、气帽孔、流体针、接料口与标识 */
+    [-0.055, 0.055].forEach((x) => {
+      this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.016, 0.016, 0.026, 12), M.dark, 'nozzle', [x, 0.063, 0.205]);
+      this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.010, 0.010, 0.032, 10), M.silver, 'nozzle', [x, 0.078, 0.205]);
+    });
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.021, 0.021, 0.026, 16), M.dark, 'nozzle', [0.089, 0.012, 0.222], [0, 0, Math.PI / 2]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.024, 0.06, 0.05), M.dark, 'nozzle', [0, -0.075, 0.225], [0.25, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.07, 0.012, 0.05), M.dark, 'nozzle', [0, -0.102, 0.225]);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.0045, 0.0045, 0.012, 6), M.dark, 'nozzle',
+        [Math.cos(a) * 0.035, Math.sin(a) * 0.035, 0.338], [Math.PI / 2, 0, 0]);
+    }
+    this.addMesh(this.nozzleGroup, new THREE.ConeGeometry(0.008, 0.02, 12), M.silver, 'nozzle', [0, 0, 0.34], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.016, 0.016, 0.032, 12), M.steel, 'nozzle', [0, -0.085, 0.17], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.022, 0.022, 0.008, 12), M.bodyBlue, 'nozzle', [0, -0.085, 0.188], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.07, 0.012, 0.032), M.violet, 'nozzle', [0, 0.058, 0.202]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.006, 0.006, 0.008, 8), M.led, 'nozzle', [0.072, 0.032, 0.205], [0, 0, Math.PI / 2]);
+    [-1, 1].forEach((s) => {
+      [0.21, 0.275].forEach((z) => {
+        this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.005, 0.005, 0.008, 8), M.dark, 'nozzle', [s * 0.074, 0.032, z], [0, 0, Math.PI / 2]);
+      });
+    });
+
     this.tcp = new THREE.Object3D();
     this.tcp.name = 'TCP';
     this.tcp.position.set(0, 0, 0.35);
@@ -504,7 +601,7 @@
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(14, 1);
+    tex.repeat.set(20, 1);
     return tex;
   };
 
@@ -554,7 +651,7 @@
     }
     this._hoseLastTarget = targets[n - 1].clone();
     const curve = new THREE.CatmullRomCurve3(this._hosePts, false, 'catmullrom', 0.35);
-    const geo = new THREE.TubeGeometry(curve, 52, 0.022, 8, false);
+    const geo = new THREE.TubeGeometry(curve, 54, 0.015, 8, false);
     this.hoseMesh.geometry.dispose();
     this.hoseMesh.geometry = geo;
   };
