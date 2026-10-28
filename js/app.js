@@ -554,7 +554,7 @@
     },
 
     toolVerb() { return SB.Tools ? SB.Tools.verb() : '喷涂'; },
-    toolName() { return SB.Tools ? SB.Tools.name() : '喷涂枪'; },
+    toolName() { return SB.Tools ? SB.Tools.name() : '喷涂夹爪'; },
     toolUsesMaterial() { return SB.Tools ? SB.Tools.usesMaterial() : true; },
 
     setSpray(on, silent) {
@@ -582,6 +582,7 @@
         }
         if (!silent && was) ui.log(this.toolVerb() + '已停止', 'info');
       }
+      if (this.robot) this.robot.setGripper(want ? 0.18 : 0.55);
     },
 
     onMaterial(id) {
@@ -1223,6 +1224,18 @@
       return total;
     },
 
+    // 依据作业面最高点自动调整升降滑台高度（高处墙面/天花板抬升，低处回落）
+    autoLiftFor(surface, sel) {
+      const L = C.robot.lift;
+      if (!L || !sel) return L ? L.home : 0;
+      const f = C.surfaceFrame(surface);
+      const top = C.isWallSurface(surface)
+        ? (f.vMin + sel.maxY)
+        : (surface === 'ceiling' ? C.room.height : 0.4);
+      const need = Math.max(0, top - 3.0);
+      return U.clamp(need * 1.2, L.min, L.max);
+    },
+
     buildPath() {
       const ui = SB.UI;
       if (this.isLocked() || this.isBusy()) return;
@@ -1235,6 +1248,7 @@
       const surface = sel.surface || this.surface;
       const savedBase = this.robot.getBasePose();
       const startJoints = this.robot.getJoints().slice();
+      this.robot.setLift(this.autoLiftFor(surface, sel), true);
       // 规划期间会临时把底盘/关节移到各候选位姿，结束后必须恢复到用户当前位姿
       const restorePose = () => {
         this.robot.setBasePose(savedBase.x, savedBase.z, savedBase.yaw);
@@ -1539,7 +1553,6 @@
           let pathSum = 0;
           let collisions = 0;
           const list = [];
-          const collideStride = Math.max(1, Math.ceil(dense.length / 160));
           dense.forEach((q) => {
             const dir = isWall && q.v > tiltStart ? tiltDir(q.v) : baseNormal;
             const target = new THREE.Vector3(
@@ -1555,16 +1568,12 @@
               pathMax = Math.max(pathMax, jump);
               pathSum += jump;
             }
-            if (list.length % collideStride === 0) {
-              this.robot.setJoints(sol.angles);
-              if (this.scene.checkCollision(this.robot.getSamplePoints(), 0.04).hit) collisions++;
-            }
             preferred = sol.angles;
             list.push({ u: q.u, v: q.v, surface: surface, angles: sol.angles });
           });
           this.robot.setJoints(startJoints);
-          // 擦墙会直接触发停机，权重远高于可达性不足
-          const cost = invalid * 1000 + unreachable * 50 + collisions * 400 + pathMax * 2 +
+          // 运行时可穿模继续作业，规划阶段不再做逐点碰撞采样，仅按可达性与关节连续性择优
+          const cost = invalid * 1000 + unreachable * 50 + pathMax * 2 +
             (pathSum / Math.max(1, list.length - 1)) * 0.5;
           return { branch: branch, list: list, unreachable: unreachable + invalid, collisions: collisions, pathMax: pathMax, cost: cost };
         };
@@ -1835,7 +1844,7 @@
       }
       if (SB.Tools && SB.Tools.active !== 'spray') {
         SB.Tools.setActive('spray', true);
-        ui.log('全屋喷涂已切换为喷涂枪', 'info');
+        ui.log('全屋喷涂已切换为喷涂夹爪', 'info');
       }
       if (this.toolUsesMaterial() && this.spray.tank <= 1) {
         ui.toast('料桶余量不足，请先补充涂料', 'warn');

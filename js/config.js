@@ -154,11 +154,13 @@
     robot: {
       position: { x: scene0.start.x, y: 0, z: scene0.start.z },
       yawOffset: Math.PI,
-      baseY: 0.78,
+      baseY: 0.86,
       shoulderY: 0.27,
+      armOffsetZ: 0.30,
+      lift: { min: 0, max: 0.62, home: 0, speed: 0.34 },
       L1: 1.05,
       L2: 0.90,
-      L3: 0.49,
+      L3: 0.56,
       home: { target: [0.45, 1.45, -0.95], direction: [0, 0, -1] },
       joints: [
         { name: 'J1', label: '底座回转', min: -180, max: 180, speed: 70 },
@@ -166,7 +168,7 @@
         { name: 'J3', label: '小臂俯仰', min: -160, max: 160, speed: 65 },
         { name: 'J4', label: '腕部回转', min: -180, max: 180, speed: 90 },
         { name: 'J5', label: '腕部摆动', min: -130, max: 130, speed: 85 },
-        { name: 'J6', label: '喷枪自转', min: -360, max: 360, speed: 120 }
+        { name: 'J6', label: '夹爪自转', min: -360, max: 360, speed: 120 }
       ]
     },
     poses: [
@@ -228,8 +230,8 @@
     // 可快速切换的末端模组
     endEffectors: [
       {
-        id: 'spray', name: '喷涂枪', short: '喷涂', badge: '喷涂枪', verb: '喷涂',
-        desc: '雾化喷涂 · 面漆 / 功能涂层', usesMaterial: true
+        id: 'spray', name: '喷涂夹爪', short: '喷涂', badge: '夹爪', verb: '喷涂',
+        desc: '雾化喷涂 · 平行夹爪末端', usesMaterial: true
       },
       {
         id: 'trowel', name: '批刮刮刀', short: '批刮', badge: '刮刀', verb: '批刮',
