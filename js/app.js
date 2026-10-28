@@ -529,23 +529,6 @@
         m.syncClock = 0;
         ui.syncJoints(angles);
       }
-      m.collisionClock += dt;
-      if (m.collisionClock > 0.15) {
-        m.collisionClock = 0;
-        const hit = this.scene.checkCollision(this.robot.getSamplePoints(), 0.03);
-        if (hit.hit && k < 0.98) {
-          this.motion = null;
-          this.robot.setJoints(this.lastSafeJoints);
-          ui.syncJoints(this.lastSafeJoints);
-          this.state = 'ready';
-          ui.setStatus('ready', '姿态切换已中止');
-          ui.setInterlock(false);
-          ui.setPathButtons({ hasPath: !!this.path, hasSelection: !!this.selection, running: false });
-          ui.toast('运动路径接近' + hit.reason + '，已中止', 'error');
-          ui.markPose('');
-          return;
-        }
-      }
       if (k >= 1) {
         const done = m.onDone;
         this.motion = null;
@@ -2163,17 +2146,6 @@
           pr.syncClock = 0;
           ui.syncJoints(this.robot.getJoints());
         }
-        pr.collisionClock += dt;
-        if (pr.collisionClock > 0.15) {
-          pr.collisionClock = 0;
-          const hit = this.scene.checkCollision(this.robot.getSamplePoints(), 0.03);
-          if (hit.hit) {
-            this.robot.setJoints(pr.from);
-            this.lastSafeJoints = pr.from.slice();
-            this.finishPathRun(true, hit.reason);
-            return;
-          }
-        }
         if (k >= 1) {
           if (pr.approachIndex < pr.segments.length - 1) {
             pr.approachIndex++;
@@ -2243,15 +2215,6 @@
         const total = this.taskTotalLength || this.pathLength;
         const pct = U.clamp(done / Math.max(0.001, total), 0, 1);
         ui.setSelectInfo(this.toolVerb() + '中 ' + Math.round(pct * 100) + '% · ' + done.toFixed(1) + ' / ' + total.toFixed(1) + ' m');
-      }
-      pr.collisionClock += dt;
-      if (pr.collisionClock > 0.18) {
-        pr.collisionClock = 0;
-        const hit = this.scene.checkCollision(this.robot.getSamplePoints(), 0.03);
-        if (hit.hit) {
-          this.fault(hit.reason);
-          return;
-        }
       }
     },
 
