@@ -386,7 +386,7 @@
   // 垂直升降立柱：封闭蓝色柱体 + 双导轨 + 滑台 + 拖链
   RobotRig.prototype.buildLift = function () {
     const M = this.materials;
-    const W = 0.52, D = 0.32, cz = -0.12;
+    const W = 0.63, D = 0.34, cz = -0.10;
     const colBottom = 0.775, colTop = 1.90;
     const colH = colTop - colBottom;
     // 电动回转平台：位于底盘上层与升降立柱之间，立柱+机械臂可独立 360° 旋转
@@ -418,7 +418,7 @@
     this.liftGroup.name = 'LiftColumn';
     this.turretGroup.add(this.liftGroup);
 
-    this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.52, 0.05, 0.36), M.steel, 'chassis', [0, colBottom + 0.02, cz]);
+    this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.63, 0.05, 0.38), M.steel, 'chassis', [0, colBottom + 0.02, cz]);
     this.addMesh(this.liftGroup, new THREE.BoxGeometry(W, colH, D), M.agvBlue, 'chassis', [0, (colBottom + colTop) / 2, cz]);
     // 侧面围板与拼接缝
     [-1, 1].forEach((s) => {
@@ -440,11 +440,11 @@
     // 正面双导轨（铝合金拉丝）
     const railZ = cz + D / 2 + 0.012;
     [-1, 1].forEach((s) => {
-      this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.048, 1.00, 0.052), M.steel, 'chassis', [s * 0.140, 1.32, railZ]);
-      this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.030, 0.98, 0.058), M.silver, 'chassis', [s * 0.140, 1.32, railZ + 0.006]);
+      this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.048, 1.00, 0.052), M.steel, 'chassis', [s * 0.170, 1.32, railZ]);
+      this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.030, 0.98, 0.058), M.silver, 'chassis', [s * 0.170, 1.32, railZ + 0.006]);
       for (let i = 0; i < 10; i++) {
         this.addMesh(this.liftGroup, new THREE.CylinderGeometry(0.006, 0.006, 0.008, 6), M.dark, 'chassis',
-          [s * 0.140, 0.88 + i * 0.098, railZ + 0.034], [Math.PI / 2, 0, 0]);
+          [s * 0.170, 0.88 + i * 0.098, railZ + 0.034], [Math.PI / 2, 0, 0]);
       }
     });
 
@@ -454,16 +454,16 @@
     this.liftCarriage.position.set(0, R.baseY + this.liftY, 0);
     this.turretGroup.add(this.liftCarriage);
     this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.44, 0.30, 0.028), M.steel, 'chassis', [0, -0.01, 0.115]);
-    this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.36, 0.032, 0.34), M.steel, 'chassis', [0, -0.165, 0.26]);
-    this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.34, 0.010, 0.32), M.silver, 'chassis', [0, -0.147, 0.26]);
+    this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.36, 0.032, 0.42), M.steel, 'chassis', [0, -0.020, 0.28]);
+    this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.34, 0.010, 0.40), M.silver, 'chassis', [0, -0.003, 0.28]);
     [-1, 1].forEach((s) => {
-      this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.022, 0.115, 0.20), M.steel, 'chassis', [s * 0.145, -0.095, 0.18], [Math.PI / 4, 0, 0]);
-      this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.075, 0.13, 0.05), M.dark, 'chassis', [s * 0.140, -0.02, 0.098]);
+      this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.022, 0.115, 0.20), M.steel, 'chassis', [s * 0.145, -0.075, 0.20], [Math.PI / 4, 0, 0]);
+      this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.075, 0.13, 0.05), M.dark, 'chassis', [s * 0.170, -0.02, 0.098]);
       [-1, 1].forEach((sy) => {
         this.addMesh(this.liftCarriage, new THREE.CylinderGeometry(0.008, 0.008, 0.01, 6), M.dark, 'chassis',
-          [s * 0.140, -0.02 + sy * 0.06, 0.126], [Math.PI / 2, 0, 0]);
+          [s * 0.170, -0.02 + sy * 0.06, 0.126], [Math.PI / 2, 0, 0]);
       });
-      this.addMesh(this.liftCarriage, new THREE.CylinderGeometry(0.007, 0.007, 0.012, 6), M.dark, 'chassis', [s * 0.16, -0.165, 0.10]);
+      this.addMesh(this.liftCarriage, new THREE.CylinderGeometry(0.007, 0.007, 0.012, 6), M.dark, 'chassis', [s * 0.19, -0.045, 0.10]);
     });
     this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.40, 0.02, 0.028), M.agvBlue, 'chassis', [0, 0.142, 0.115]);
 
@@ -551,107 +551,147 @@
   RobotRig.prototype.buildArm = function () {
     const M = this.materials;
     const L1 = R.L1, L2 = R.L2;
+    // 布罩褶皱鼓包：沿臂身不规则布置，避免规则圆筒感
+    const lump = (parent, x, y, z, r, sx, sy, sz, mat) => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), mat || M.fabric);
+      m.position.set(x, y, z);
+      m.scale.set(sx, sy, sz);
+      m.castShadow = m.receiveShadow = true;
+      m.userData.layer = 'arm';
+      parent.add(m);
+      this.armMeshes.push(m);
+      return m;
+    };
     this.armBase = this.liftCarriage;
     const armZ = R.armOffsetZ || 0.30;
     const j1 = new THREE.Group();
     j1.name = 'J1';
     j1.position.set(0, 0, armZ);
     this.liftCarriage.add(j1);
-    // J1 布罩收口 + 松紧带
-    this.addMesh(j1, new THREE.CylinderGeometry(0.235, 0.25, 0.14, 26), M.fabric, 'arm', [0, 0.07, 0]);
-    this.addMesh(j1, new THREE.CylinderGeometry(0.245, 0.245, 0.028, 26), M.dark, 'arm', [0, 0.014, 0]);
-    this.addMesh(j1, new THREE.SphereGeometry(0.20, 22, 14), M.fabric, 'arm', [0, 0.225, 0]);
-    this.addMesh(j1, new THREE.TorusGeometry(0.19, 0.016, 8, 24), M.fabricDark, 'arm', [0, 0.18, 0], [Math.PI / 2, 0, 0]);
-    this.addMesh(j1, new THREE.BoxGeometry(0.20, 0.03, 0.02), M.dark, 'arm', [0.10, 0.28, 0.16]);
+    // J1：银灰法兰 + 布罩收口、松紧带与下垂褶皱
+    this.addMesh(j1, new THREE.CylinderGeometry(0.185, 0.195, 0.045, 28), M.steel, 'arm', [0, 0.022, 0]);
+    this.addMesh(j1, new THREE.CylinderGeometry(0.20, 0.225, 0.16, 28), M.fabric, 'arm', [0, 0.115, 0]);
+    this.addMesh(j1, new THREE.TorusGeometry(0.224, 0.013, 8, 28), M.dark, 'arm', [0, 0.05, 0], [Math.PI / 2, 0, 0]);
+    this.addMesh(j1, new THREE.SphereGeometry(0.175, 24, 16), M.fabric, 'arm', [0, 0.25, 0]);
+    this.addMesh(j1, new THREE.TorusGeometry(0.165, 0.010, 6, 24), M.fabricDark, 'arm', [0, 0.305, 0], [Math.PI / 2, 0, 0]);
+    lump(j1, 0.10, 0.16, 0.13, 0.06, 1.1, 0.55, 0.8);
+    this.addMesh(j1, new THREE.BoxGeometry(0.008, 0.003, 0.15), M.fabricDark, 'arm', [0.155, 0.19, 0.09]);
 
     const j2 = new THREE.Group();
     j2.name = 'J2';
     j2.position.set(0, R.shoulderY, 0);
     j1.add(j2);
-    // 肩部布罩堆叠
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.205, 24, 16), M.fabric);
-    shoulder.scale.set(0.95, 0.92, 1.06);
+    // 肩部：布罩堆叠 + 露出的伺服壳体端盖
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.175, 24, 16), M.fabric);
+    shoulder.scale.set(0.98, 0.90, 1.06);
     shoulder.castShadow = shoulder.receiveShadow = true;
     shoulder.userData.layer = 'arm';
     j2.add(shoulder);
     this.armMeshes.push(shoulder);
-    [-0.13, 0, 0.13].forEach((z, i) => {
-      this.addMesh(j2, new THREE.TorusGeometry(0.185 - i * 0.006, 0.017, 8, 26), M.fabricDark, 'arm', [0, 0, z], [0, Math.PI / 2, 0]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.082, 0.082, 0.335, 18), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.088, 0.088, 0.022, 18), M.steel, 'arm', [-0.168, 0, 0], [0, 0, Math.PI / 2]);
+    [-0.09, 0.02, 0.12].forEach((x, i) => {
+      this.addMesh(j2, new THREE.TorusGeometry(0.162 - i * 0.006, 0.012, 7, 24), M.fabricDark, 'arm', [x, 0, 0], [0, Math.PI / 2, 0]);
     });
+    lump(j2, 0.02, -0.12, 0.02, 0.065, 1.3, 0.6, 1.35);
 
-    // 大臂：布罩圆管，两端收口、褶皱环与第一道束带
-    const upLen = L1 - 0.09;
-    this.addMesh(j2, new THREE.CylinderGeometry(0.128, 0.118, upLen, 22), M.fabric, 'arm', [0, 0, 0.045 + upLen / 2], [Math.PI / 2, 0, 0]);
-    [0.16, 0.30, 0.46, 0.62, 0.78].forEach((z, i) => {
-      this.addMesh(j2, new THREE.TorusGeometry(0.124 + (i % 2) * 0.008, 0.013, 7, 24), M.fabricDark, 'arm', [0, 0, z]);
-    });
+    // 大臂：锥形布罩 + 不规则褶皱鼓包 + 纵向缝线 + 束带
+    const upLen = L1 - 0.06;
+    this.addMesh(j2, new THREE.CylinderGeometry(0.105, 0.093, upLen, 26), M.fabric, 'arm', [0, 0, 0.03 + upLen / 2], [Math.PI / 2, 0, 0]);
+    lump(j2, 0.02, 0.02, 0.20, 0.07, 1.35, 1.05, 0.85);
+    lump(j2, -0.025, -0.04, 0.37, 0.062, 1.25, 1.0, 1.0);
+    lump(j2, 0.01, 0.045, 0.57, 0.078, 1.30, 1.10, 0.75);
+    lump(j2, 0.015, -0.02, 0.79, 0.058, 1.15, 0.95, 0.95);
+    this.addMesh(j2, new THREE.TorusGeometry(0.100, 0.007, 6, 26), M.fabricDark, 'arm', [0, 0, 0.30]);
+    this.addMesh(j2, new THREE.TorusGeometry(0.097, 0.006, 6, 26), M.fabricDark, 'arm', [0, 0, 0.67]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.006, 0.003, 0.86), M.fabricDark, 'arm', [0, 0.102, 0.49]);
     // 第一道黑色束带（J3 附近）+ 带扣
-    this.addMesh(j2, new THREE.TorusGeometry(0.130, 0.017, 8, 26), M.dark, 'arm', [0, 0, L1 - 0.27]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.055, 0.028, 0.032), M.dark, 'arm', [0.10, 0.058, L1 - 0.27]);
-    this.addMesh(j2, new THREE.BoxGeometry(0.016, 0.040, 0.026), M.steel, 'arm', [0.10, 0.058, L1 - 0.27]);
-    // 背部管线束
+    this.addMesh(j2, new THREE.TorusGeometry(0.106, 0.014, 8, 26), M.dark, 'arm', [0, 0, L1 - 0.24]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.048, 0.026, 0.030), M.dark, 'arm', [0.084, 0.042, L1 - 0.24]);
+    this.addMesh(j2, new THREE.BoxGeometry(0.014, 0.036, 0.024), M.steel, 'arm', [0.084, 0.042, L1 - 0.24]);
+    // 背部管线束 + 卡箍
     const cable1 = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.03, -0.10, 0.08),
-      new THREE.Vector3(0.05, -0.155, 0.34),
-      new THREE.Vector3(0.04, -0.145, 0.66),
-      new THREE.Vector3(0.02, -0.10, L1 - 0.04)
+      new THREE.Vector3(0.02, -0.09, 0.08),
+      new THREE.Vector3(0.03, -0.135, 0.34),
+      new THREE.Vector3(0.025, -0.125, 0.66),
+      new THREE.Vector3(0.01, -0.085, L1 - 0.04)
     ]);
-    this.addMesh(j2, new THREE.TubeGeometry(cable1, 20, 0.019, 7, false), M.rubber, 'arm');
-    [-0.02, 0.34, 0.70].forEach((z) => {
-      this.addMesh(j2, new THREE.TorusGeometry(0.135, 0.010, 6, 22), M.fabricDark, 'arm', [0, 0, z]);
+    this.addMesh(j2, new THREE.TubeGeometry(cable1, 20, 0.016, 7, false), M.rubber, 'arm');
+    [0.20, 0.52, 0.82].forEach((z) => {
+      this.addMesh(j2, new THREE.TorusGeometry(0.044, 0.006, 6, 16), M.steel, 'arm', [0.01, -0.108, z], [0, 0, 0]);
     });
 
     const j3 = new THREE.Group();
     j3.name = 'J3';
     j3.position.set(0, 0, L1);
     j2.add(j3);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.175, 22, 14), M.fabric);
-    elbow.scale.set(0.96, 1.0, 0.9);
+    // 肘部：布罩球 + 绕 J3 轴的折痕环 + 露出的伺服端盖
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.15, 22, 14), M.fabric);
+    elbow.scale.set(0.92, 1.0, 1.12);
     elbow.castShadow = elbow.receiveShadow = true;
     elbow.userData.layer = 'arm';
     j3.add(elbow);
     this.armMeshes.push(elbow);
-    [-0.08, 0.06].forEach((z) => {
-      this.addMesh(j3, new THREE.TorusGeometry(0.158, 0.016, 8, 24), M.fabricDark, 'arm', [0, 0, z], [0, Math.PI / 2, 0]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.072, 0.072, 0.30, 18), M.dark, 'arm', [0, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.078, 0.078, 0.020, 18), M.steel, 'arm', [-0.152, 0, 0], [0, 0, Math.PI / 2]);
+    [-0.07, 0.055].forEach((x, i) => {
+      this.addMesh(j3, new THREE.TorusGeometry(0.135 - i * 0.008, 0.011, 7, 24), M.fabricDark, 'arm', [x, 0, 0], [0, Math.PI / 2, 0]);
     });
+    lump(j3, 0.0, -0.10, 0.03, 0.06, 1.25, 0.55, 1.3);
 
-    // 小臂：布罩细管 + 褶皱 + 第二道束带
-    const foreLen = L2 - 0.12;
-    this.addMesh(j3, new THREE.CylinderGeometry(0.104, 0.092, foreLen, 20), M.fabric, 'arm', [0, 0, 0.06 + foreLen / 2], [Math.PI / 2, 0, 0]);
-    [0.18, 0.34, 0.50, 0.66].forEach((z, i) => {
-      this.addMesh(j3, new THREE.TorusGeometry(0.101 + (i % 2) * 0.006, 0.011, 7, 22), M.fabricDark, 'arm', [0, 0, z]);
-    });
-    this.addMesh(j3, new THREE.TorusGeometry(0.108, 0.015, 8, 24), M.dark, 'arm', [0, 0, L2 - 0.17]);
-    this.addMesh(j3, new THREE.BoxGeometry(0.048, 0.024, 0.028), M.dark, 'arm', [0.082, 0.046, L2 - 0.17]);
+    // 小臂：锥形布罩 + 不规则褶皱 + 第二道束带
+    const foreLen = L2 - 0.06;
+    this.addMesh(j3, new THREE.CylinderGeometry(0.082, 0.072, foreLen, 24), M.fabric, 'arm', [0, 0, 0.03 + foreLen / 2], [Math.PI / 2, 0, 0]);
+    lump(j3, 0.01, 0.02, 0.18, 0.055, 1.3, 1.0, 0.9);
+    lump(j3, -0.015, -0.035, 0.35, 0.050, 1.2, 0.95, 1.0);
+    lump(j3, 0.0, 0.032, 0.54, 0.060, 1.25, 1.05, 0.8);
+    lump(j3, 0.01, -0.015, 0.70, 0.045, 1.15, 0.95, 0.95);
+    this.addMesh(j3, new THREE.TorusGeometry(0.078, 0.006, 6, 24), M.fabricDark, 'arm', [0, 0, 0.28]);
+    this.addMesh(j3, new THREE.TorusGeometry(0.075, 0.005, 6, 24), M.fabricDark, 'arm', [0, 0, 0.50]);
+    this.addMesh(j3, new THREE.BoxGeometry(0.005, 0.003, 0.68), M.fabricDark, 'arm', [0, 0.079, 0.39]);
+    this.addMesh(j3, new THREE.TorusGeometry(0.085, 0.013, 8, 24), M.dark, 'arm', [0, 0, L2 - 0.19]);
+    this.addMesh(j3, new THREE.BoxGeometry(0.042, 0.022, 0.026), M.dark, 'arm', [0.070, 0.038, L2 - 0.19]);
+    this.addMesh(j3, new THREE.BoxGeometry(0.012, 0.032, 0.020), M.steel, 'arm', [0.070, 0.038, L2 - 0.19]);
     const cable2 = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.02, -0.085, 0.06),
-      new THREE.Vector3(0.04, -0.128, 0.32),
-      new THREE.Vector3(0.02, -0.115, 0.60),
-      new THREE.Vector3(0, -0.085, L2 - 0.06)
+      new THREE.Vector3(0.015, -0.075, 0.06),
+      new THREE.Vector3(0.03, -0.110, 0.32),
+      new THREE.Vector3(0.02, -0.100, 0.60),
+      new THREE.Vector3(0, -0.075, L2 - 0.06)
     ]);
-    this.addMesh(j3, new THREE.TubeGeometry(cable2, 18, 0.016, 7, false), M.rubber, 'arm');
+    this.addMesh(j3, new THREE.TubeGeometry(cable2, 18, 0.014, 7, false), M.rubber, 'arm');
+    [0.25, 0.55, 0.78].forEach((z) => {
+      this.addMesh(j3, new THREE.TorusGeometry(0.038, 0.005, 6, 14), M.steel, 'arm', [0.01, -0.096, z]);
+    });
 
     const j4 = new THREE.Group();
     j4.name = 'J4';
     j4.position.set(0, 0, L2);
     j3.add(j4);
-    const wristA = new THREE.Mesh(new THREE.SphereGeometry(0.105, 20, 12), M.fabric);
+    // J4：布罩袖口 + 外露银灰回转法兰
+    const wristA = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.076, 0.13, 22), M.fabric);
+    wristA.rotation.x = Math.PI / 2;
+    wristA.position.set(0, 0, 0.02);
     wristA.castShadow = wristA.receiveShadow = true;
     wristA.userData.layer = 'arm';
     j4.add(wristA);
     this.armMeshes.push(wristA);
-    this.addMesh(j4, new THREE.TorusGeometry(0.094, 0.012, 7, 22), M.fabricDark, 'arm', [0, 0, 0.035]);
+    this.addMesh(j4, new THREE.TorusGeometry(0.078, 0.009, 7, 22), M.fabricDark, 'arm', [0, 0, 0.085]);
+    this.addMesh(j4, new THREE.CylinderGeometry(0.062, 0.062, 0.022, 20), M.steel, 'arm', [0, 0, 0.105], [Math.PI / 2, 0, 0]);
 
     const j5 = new THREE.Group();
     j5.name = 'J5';
     j4.add(j5);
-    const wristB = new THREE.Mesh(new THREE.SphereGeometry(0.092, 18, 12), M.fabric);
-    wristB.scale.set(1.05, 1.0, 1.0);
+    // J5：布罩收口 + 外露银灰腕部关节
+    const wristB = new THREE.Mesh(new THREE.SphereGeometry(0.083, 18, 12), M.fabric);
+    wristB.scale.set(0.95, 1.0, 1.0);
     wristB.castShadow = wristB.receiveShadow = true;
     wristB.userData.layer = 'arm';
     j5.add(wristB);
     this.armMeshes.push(wristB);
-    this.addMesh(j5, new THREE.CylinderGeometry(0.082, 0.082, 0.03, 20), M.steel, 'arm', [0, 0, 0.075], [Math.PI / 2, 0, 0]);
+    this.addMesh(j5, new THREE.CylinderGeometry(0.058, 0.058, 0.10, 18), M.steel, 'arm', [0, 0, 0.06], [0, 0, Math.PI / 2]);
+    this.addMesh(j5, new THREE.CylinderGeometry(0.062, 0.062, 0.012, 18), M.silver, 'arm', [0.058, 0, 0.06], [0, 0, Math.PI / 2]);
+    this.addMesh(j5, new THREE.CylinderGeometry(0.062, 0.062, 0.012, 18), M.silver, 'arm', [-0.058, 0, 0.06], [0, 0, Math.PI / 2]);
+    lump(j5, 0, -0.062, 0.005, 0.04, 1.2, 0.5, 1.05);
 
     const j6 = new THREE.Group();
     j6.name = 'J6';
@@ -838,10 +878,10 @@
     const pts = [
       start,
       toW(this.liftCarriage, new THREE.Vector3(0.247, 0.10, 0.075)),
-      toW(g[1], new THREE.Vector3(0.045, -0.145, 0.30)),
-      toW(g[1], new THREE.Vector3(0.045, -0.140, 0.80)),
-      toW(g[2], new THREE.Vector3(0.030, -0.100, 0.30)),
-      toW(g[2], new THREE.Vector3(0.020, -0.095, 0.66)),
+      toW(g[1], new THREE.Vector3(0.030, -0.115, 0.30)),
+      toW(g[1], new THREE.Vector3(0.030, -0.110, 0.80)),
+      toW(g[2], new THREE.Vector3(0.020, -0.095, 0.30)),
+      toW(g[2], new THREE.Vector3(0.015, -0.090, 0.66)),
       toW(g[4], new THREE.Vector3(0, -0.070, 0.02))
     ];
     const endParent = this.toolMount || this.nozzleGroup || this.tcp;
@@ -961,7 +1001,7 @@
     if (!this.bodyBoxes) {
       this.bodyBoxes = [
         { name: '底盘', min: [-0.40, 0.05, -0.53], max: [0.40, 0.80, 0.53] },
-        { name: '升降立柱', min: [-0.28, 0.775, -0.30], max: [0.28, 1.92, 0.06] }
+        { name: '升降立柱', min: [-0.33, 0.775, -0.30], max: [0.33, 1.92, 0.09] }
       ];
     }
     const m = margin == null ? 0.04 : margin;
@@ -1079,12 +1119,9 @@
 
   // 转运姿态：机械臂收拢在设备前方，避免从机柜顶部翻越造成穿模
   RobotRig.prototype.computeTransportJoints = function () {
-    const yaw = this.baseHeading();
-    const fx = Math.sin(yaw), fz = Math.cos(yaw);
-    const target = new THREE.Vector3(this.basePos.x + fx * 0.9, 1.4, this.basePos.z + fz * 0.9);
-    const sol = this.solveIK(target, new THREE.Vector3(0, -1, 0), this.currentJoints);
-    if (sol && sol.angles.every((v) => isFinite(v))) return sol.angles;
-    return this.computeHomeJoints();
+    // 折叠待机位：大臂上扬、小臂前折，整臂保持在立柱正前方，避免与立柱穿模
+    const pose = [0, -60, 150, 0, 90, 0];
+    return pose.map((v, i) => U.clamp(v, R.joints[i].min, R.joints[i].max));
   };
 
   /**
