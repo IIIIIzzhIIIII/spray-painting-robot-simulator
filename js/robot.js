@@ -386,7 +386,7 @@
   // 垂直升降立柱：封闭蓝色柱体 + 双导轨 + 滑台 + 拖链
   RobotRig.prototype.buildLift = function () {
     const M = this.materials;
-    const W = 0.63, D = 0.55, cz = -0.17;
+    const W = 0.63, D = 0.60, cz = -0.17;
     const colBottom = 0.775, colTop = 1.90;
     const colH = colTop - colBottom;
     // 电动回转平台：位于底盘上层与升降立柱之间，立柱+机械臂可独立 360° 旋转
