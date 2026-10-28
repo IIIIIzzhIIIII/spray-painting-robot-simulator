@@ -386,7 +386,7 @@
   // 垂直升降立柱：封闭蓝色柱体 + 双导轨 + 滑台 + 拖链
   RobotRig.prototype.buildLift = function () {
     const M = this.materials;
-    const W = 0.63, D = 0.34, cz = -0.10;
+    const W = 0.63, D = 0.55, cz = -0.17;
     const colBottom = 0.775, colTop = 1.90;
     const colH = colTop - colBottom;
     // 电动回转平台：位于底盘上层与升降立柱之间，立柱+机械臂可独立 360° 旋转
@@ -402,10 +402,6 @@
       this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.014, 0.012, 0.014), M.dark, 'chassis',
         [Math.cos(a) * 0.30, 0.775, Math.sin(a) * 0.30], [0, -a, 0]);
     }
-    // 回转驱动电机与减速箱
-    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.11, 0.09, 0.12), M.dark, 'chassis', [0.25, 0.792, -0.27]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.032, 0.032, 0.10, 16), M.steel, 'chassis', [0.25, 0.845, -0.27]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.045, 0.045, 0.014, 16), M.silver, 'chassis', [0.25, 0.895, -0.27]);
     // 旋转平台（随立柱转动）
     this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.292, 0.292, 0.020, 40), M.agvBlue, 'chassis', [0, 0.780, 0]);
     this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.010, 36), M.silver, 'chassis', [0, 0.792, 0]);
@@ -418,7 +414,7 @@
     this.liftGroup.name = 'LiftColumn';
     this.turretGroup.add(this.liftGroup);
 
-    this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.63, 0.05, 0.38), M.steel, 'chassis', [0, colBottom + 0.02, cz]);
+    this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.63, 0.05, 0.52), M.steel, 'chassis', [0, colBottom + 0.02, cz]);
     this.addMesh(this.liftGroup, new THREE.BoxGeometry(W, colH, D), M.agvBlue, 'chassis', [0, (colBottom + colTop) / 2, cz]);
     // 侧面围板与拼接缝
     [-1, 1].forEach((s) => {
@@ -432,10 +428,12 @@
       this.addMesh(this.liftGroup, new THREE.CylinderGeometry(0.010, 0.010, 0.008, 6), M.dark, 'chassis',
         [sx * 0.24, colTop + 0.032, cz + sz * 0.12]);
     }));
-    // 警示标签（CAUTION）
+    // 警示标签（CAUTION）：贴在立柱侧面，随立柱转动
     const cautionMat = new THREE.MeshStandardMaterial({ map: this.makeCautionTexture(), roughness: 0.42, metalness: 0.05 });
-    this.addMesh(this.liftGroup, new THREE.PlaneGeometry(0.16, 0.22), cautionMat, 'chassis',
-      [0.05, 1.54, cz - D / 2 - 0.004], [0, Math.PI, 0]);
+    this.addMesh(this.liftGroup, new THREE.PlaneGeometry(0.18, 0.25), cautionMat, 'chassis',
+      [0.02, 1.52, cz - D / 2 - 0.004], [0, Math.PI, 0]);
+    this.addMesh(this.liftGroup, new THREE.PlaneGeometry(0.18, 0.25), cautionMat, 'chassis',
+      [W / 2 + 0.004, 1.52, cz], [0, Math.PI / 2, 0]);
 
     // 正面双导轨（铝合金拉丝）
     const railZ = cz + D / 2 + 0.012;
@@ -1001,7 +999,7 @@
     if (!this.bodyBoxes) {
       this.bodyBoxes = [
         { name: '底盘', min: [-0.40, 0.05, -0.53], max: [0.40, 0.80, 0.53] },
-        { name: '升降立柱', min: [-0.33, 0.775, -0.30], max: [0.33, 1.92, 0.09] }
+        { name: '升降立柱', min: [-0.33, 0.775, -0.41], max: [0.33, 1.92, 0.09] }
       ];
     }
     const m = margin == null ? 0.04 : margin;
