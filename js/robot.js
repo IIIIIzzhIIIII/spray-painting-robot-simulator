@@ -30,6 +30,8 @@
     this._layerState = { chassis: true, arm: true, nozzle: true, hose: true };
     this.liftY = (R.lift && R.lift.home) || 0;
     this.liftTarget = this.liftY;
+    this.turretDeg = (R.turret && R.turret.home) || 0;
+    this.turretTarget = this.turretDeg;
     this.gripperOpen = 0.55;
     this.gripperTarget = 0.55;
 
@@ -378,9 +380,7 @@
       this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.30, 0.075), brandMat, 'chassis', [s * (W / 2 + 0.008), 0.56, -0.12], [0, s * Math.PI / 2, 0]);
     });
 
-    // 立柱侧出管口（输料管起点）
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.028, 0.028, 0.045, 16), M.steel, 'chassis', [0.30, 1.06, -0.10], [0, 0, Math.PI / 2]);
-    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.015, 0.015, 0.018, 12), M.dark, 'chassis', [0.324, 1.06, -0.10], [0, 0, Math.PI / 2]);
+    // 后部：检修门、锁扣、HMI 屏与急停、状态灯
   };
 
   // 垂直升降立柱：封闭蓝色柱体 + 双导轨 + 滑台 + 拖链
@@ -389,9 +389,34 @@
     const W = 0.52, D = 0.32, cz = -0.12;
     const colBottom = 0.775, colTop = 1.90;
     const colH = colTop - colBottom;
+    // 电动回转平台：位于底盘上层与升降立柱之间，立柱+机械臂可独立 360° 旋转
+    this.turretGroup = new THREE.Group();
+    this.turretGroup.name = 'Turret';
+    this.root.add(this.turretGroup);
+    this.turretGroup.rotation.y = U.deg(this.turretDeg);
+    // 固定在底盘上的回转支承与内齿圈
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.315, 0.315, 0.024, 40), M.steel, 'chassis', [0, 0.760, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.298, 0.298, 0.012, 40), M.agvBlueDark, 'chassis', [0, 0.774, 0]);
+    for (let i = 0; i < 36; i++) {
+      const a = i / 36 * Math.PI * 2;
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.014, 0.012, 0.014), M.dark, 'chassis',
+        [Math.cos(a) * 0.30, 0.775, Math.sin(a) * 0.30], [0, -a, 0]);
+    }
+    // 回转驱动电机与减速箱
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.11, 0.09, 0.12), M.dark, 'chassis', [0.25, 0.792, -0.27]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.032, 0.032, 0.10, 16), M.steel, 'chassis', [0.25, 0.845, -0.27]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.045, 0.045, 0.014, 16), M.silver, 'chassis', [0.25, 0.895, -0.27]);
+    // 旋转平台（随立柱转动）
+    this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.292, 0.292, 0.020, 40), M.agvBlue, 'chassis', [0, 0.780, 0]);
+    this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.26, 0.26, 0.010, 36), M.silver, 'chassis', [0, 0.792, 0]);
+    this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.048, 0.048, 0.022, 18), M.yellow, 'chassis', [0, 0.800, -0.26]);
+    // 立柱侧出管口（输料管起点，随回转平台转动）
+    this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.028, 0.028, 0.045, 16), M.steel, 'chassis', [0.30, 1.06, -0.10], [0, 0, Math.PI / 2]);
+    this.addMesh(this.turretGroup, new THREE.CylinderGeometry(0.015, 0.015, 0.018, 12), M.dark, 'chassis', [0.324, 1.06, -0.10], [0, 0, Math.PI / 2]);
+
     this.liftGroup = new THREE.Group();
     this.liftGroup.name = 'LiftColumn';
-    this.root.add(this.liftGroup);
+    this.turretGroup.add(this.liftGroup);
 
     this.addMesh(this.liftGroup, new THREE.BoxGeometry(0.52, 0.05, 0.36), M.steel, 'chassis', [0, colBottom + 0.02, cz]);
     this.addMesh(this.liftGroup, new THREE.BoxGeometry(W, colH, D), M.agvBlue, 'chassis', [0, (colBottom + colTop) / 2, cz]);
@@ -427,7 +452,7 @@
     this.liftCarriage = new THREE.Group();
     this.liftCarriage.name = 'LiftCarriage';
     this.liftCarriage.position.set(0, R.baseY + this.liftY, 0);
-    this.root.add(this.liftCarriage);
+    this.turretGroup.add(this.liftCarriage);
     this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.44, 0.30, 0.028), M.steel, 'chassis', [0, -0.01, 0.115]);
     this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.36, 0.032, 0.34), M.steel, 'chassis', [0, -0.165, 0.26]);
     this.addMesh(this.liftCarriage, new THREE.BoxGeometry(0.34, 0.010, 0.32), M.silver, 'chassis', [0, -0.147, 0.26]);
@@ -528,7 +553,6 @@
     const L1 = R.L1, L2 = R.L2;
     this.armBase = this.liftCarriage;
     const armZ = R.armOffsetZ || 0.30;
-
     const j1 = new THREE.Group();
     j1.name = 'J1';
     j1.position.set(0, 0, armZ);
@@ -742,6 +766,28 @@
 
   RobotRig.prototype.getLift = function () { return this.liftY; };
 
+  RobotRig.prototype.setTurret = function (deg, instant, relative) {
+    const T = R.turret || { min: 0, max: 360, home: 0 };
+    const value = Number(deg) || 0;
+    if (relative) {
+      this.turretTarget = this.turretDeg + value;
+    } else {
+      const v = U.clamp(value, T.min, T.max);
+      // 选择与当前角度等价且行程最短的目标，避免 0°/360° 边界反复回转
+      const k = Math.round((this.turretDeg - v) / 360);
+      this.turretTarget = v + k * 360;
+    }
+    if (instant) {
+      this.turretDeg = this.turretTarget;
+      if (this.turretGroup) this.turretGroup.rotation.y = U.deg(this.turretDeg);
+    }
+    return this.getTurret();
+  };
+
+  RobotRig.prototype.getTurret = function () {
+    return ((this.turretDeg % 360) + 360) % 360;
+  };
+
   RobotRig.prototype.buildHose = function () {
     this.hoseGroup = new THREE.Group();
     this.hoseGroup.name = 'Hose';
@@ -786,7 +832,7 @@
   // 管线束：立柱出口 → 拖链 → 大臂 → 小臂 → 腕部 → 夹爪
   RobotRig.prototype.hoseTargets = function () {
     const g = this.jointGroups;
-    const start = this.root.localToWorld(this._hoseStartLocal.clone());
+    const start = this.turretGroup.localToWorld(this._hoseStartLocal.clone());
     if (g.length !== 6) return [start, this.getTCP().position.clone()];
     const toW = (obj, p) => obj.localToWorld(p);
     const pts = [
@@ -1003,6 +1049,12 @@
       if (this.liftCarriage) this.liftCarriage.position.y = R.baseY + this.liftY;
       this.updateChain();
     }
+    if (Math.abs(this.turretDeg - this.turretTarget) > 1e-4) {
+      const sp = (R.turret && R.turret.speed) || 120;
+      const d = this.turretTarget - this.turretDeg;
+      this.turretDeg += Math.sign(d) * Math.min(Math.abs(d), sp * dt);
+      if (this.turretGroup) this.turretGroup.rotation.y = U.deg(this.turretDeg);
+    }
     if (Math.abs(this.gripperOpen - this.gripperTarget) > 1e-4) {
       const d = this.gripperTarget - this.gripperOpen;
       this.gripperOpen += Math.sign(d) * Math.min(Math.abs(d), 1.8 * dt);
@@ -1011,8 +1063,8 @@
     this.updateWheels(dt);
   };
   RobotRig.prototype.computeHomeJoints = function () {
-    // 目标点按底盘当前朝向转换到世界坐标，侧墙作业时也保持在机器人正前方
-    const yaw = this.baseYaw;
+    // 目标点按回转平台当前朝向转换到世界坐标，侧墙作业时也保持在机器人正前方
+    const yaw = this.baseHeading();
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const rx = Math.cos(yaw), rz = -Math.sin(yaw);
     const target = new THREE.Vector3(
@@ -1027,7 +1079,7 @@
 
   // 转运姿态：机械臂收拢在设备前方，避免从机柜顶部翻越造成穿模
   RobotRig.prototype.computeTransportJoints = function () {
-    const yaw = this.baseYaw;
+    const yaw = this.baseHeading();
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const target = new THREE.Vector3(this.basePos.x + fx * 0.9, 1.4, this.basePos.z + fz * 0.9);
     const sol = this.solveIK(target, new THREE.Vector3(0, -1, 0), this.currentJoints);
@@ -1054,7 +1106,7 @@
     const dx = wrist.x - shoulder.x;
     const dz = wrist.z - shoulder.z;
     const thetaW = Math.atan2(dx, dz);
-    const j1 = U.norm180(U.rad(thetaW - this.baseYaw));
+    const j1 = U.norm180(U.rad(thetaW - this.baseYaw - U.deg(this.turretDeg)));
     const r = Math.hypot(dx, dz);
     const wy = wrist.y - shoulder.y;
     let rw = r, wyw = wy;
@@ -1136,9 +1188,14 @@
       scaled, limitOK, posError: posErr, dirError: dirErr, fk, branch: best.sign
     };
   };
-  // 肩部（J2 轴）世界坐标：随底盘位姿、升降高度与臂座偏置变化
+  // 有效朝向：底盘朝向 + 回转平台角度
+  RobotRig.prototype.baseHeading = function () {
+    return this.baseYaw + U.deg(this.turretDeg || 0);
+  };
+
+  // 肩部（J2 轴）世界坐标：随底盘位姿、回转角度、升降高度与臂座偏置变化
   RobotRig.prototype.shoulderPoint = function () {
-    const yaw = this.baseYaw;
+    const yaw = this.baseHeading();
     const c = Math.cos(yaw), s = Math.sin(yaw);
     const off = R.armOffsetZ || 0;
     return new THREE.Vector3(
@@ -1163,7 +1220,7 @@
       -Math.sin(j5) * Math.cos(j4) * sinA + Math.cos(j5) * cosA
     ).normalize();
     const local = new THREE.Vector3(0, yW, rW).addScaledVector(dirLocal, R.L3);
-    const theta = this.baseYaw + U.deg(angles[0]);
+    const theta = this.baseHeading() + U.deg(angles[0]);
     const c = Math.cos(theta), s = Math.sin(theta);
     const shoulder = this.shoulderPoint();
     const position = new THREE.Vector3(

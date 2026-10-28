@@ -29,6 +29,7 @@
     motion: null,
     pathRun: null,
     baseDrive: null,
+    baseSpin: null,
     pathBase: null,
     pathRoute: null,
     resumeState: null,
@@ -247,7 +248,7 @@
     },
 
     isLocked() { return this.state === 'estop' || this.state === 'fault'; },
-    isBusy() { return !!this.pathRun || !!this.baseDrive || this.motion || this.teach.playing; },
+    isBusy() { return !!this.pathRun || !!this.baseDrive || !!this.baseSpin || this.motion || this.teach.playing; },
 
     bind() {
       const ui = SB.UI;
@@ -259,6 +260,13 @@
       ui.poseButtons.forEach((btn) => {
         btn.addEventListener('click', () => this.onPose(btn.dataset.pose));
       });
+      on('turretSlider', 'input', () => this.onTurretSlider($('turretSlider')));
+      on('liftSlider', 'input', () => this.onLiftSlider($('liftSlider')));
+      on('btnTurret360', 'click', () => this.spinTurret(360));
+      on('btnTurretHome', 'click', () => this.homeTurret());
+      on('btnBase360', 'click', () => this.spinBase(Math.PI * 2));
+      on('btnLiftTop', 'click', () => this.setLiftManual(C.robot.lift.max));
+      on('btnLiftLow', 'click', () => this.setLiftManual(C.robot.lift.min));
 
       on('btnSprayToggle', 'click', () => this.startAutoSpray());
       on('btnSprayStop', 'click', () => {
@@ -460,6 +468,104 @@
       this.lastSafeJoints = angles.slice();
       ui.syncJoints(angles);
       ui.markPose('');
+    },
+
+    // 手动回转/升降前的互锁检查
+    manualAxisReady() {
+      const ui = SB.UI;
+      if (this.isLocked()) return false;
+      if (this.isBusy() || this.baseSpin) {
+        ui.toast('运动/作业进行中，请先停止后再调整底盘回转或升降', 'warn');
+        return false;
+      }
+      if (this.sprayDesired) {
+        ui.toast('请先停止喷涂后再调整底盘回转或升降', 'warn');
+        return false;
+      }
+      return true;
+    },
+
+    // 调整回转/升降会改变 TCP 基准，已有路径需作废
+    prepareAxisChange(clearPath) {
+      if (!this.manualAxisReady()) return false;
+      if (clearPath !== false && this.path) {
+        this.clearPlanning(false);
+        SB.UI.log('底盘轴调整，旧路径已清除，请重新生成', 'warn');
+      }
+      return true;
+    },
+
+    onTurretSlider(input) {
+      const deg = Number(input.value) || 0;
+      if (!this.prepareAxisChange()) {
+        SB.UI.syncChassisAxes(this.robot.getTurret(), this.robot.getLift());
+        return;
+      }
+      this.robot.setTurret(deg, false);
+    },
+
+    onLiftSlider(input) {
+      const h = Number(input.value) || 0;
+      if (!this.prepareAxisChange()) {
+        SB.UI.syncChassisAxes(this.robot.getTurret(), this.robot.getLift());
+        return;
+      }
+      this.robot.setLift(h, false);
+    },
+
+    spinTurret(deg) {
+      const ui = SB.UI;
+      if (!this.prepareAxisChange()) return;
+      this.robot.setTurret(deg, false, true);
+      ui.log('回转平台旋转 ' + deg + '°', 'info');
+      ui.toast('回转平台开始旋转 ' + deg + '°', 'ok');
+    },
+
+    homeTurret() {
+      const ui = SB.UI;
+      if (!this.prepareAxisChange()) return;
+      this.robot.setTurret(0, false);
+      ui.log('回转平台回正', 'info');
+      ui.toast('回转平台回正至 0°', 'ok');
+    },
+
+    setLiftManual(h) {
+      const ui = SB.UI;
+      if (!this.prepareAxisChange()) return;
+      this.robot.setLift(h, false);
+      ui.log('升降滑台目标高度 ' + U.fmt(h, 2) + ' m', 'info');
+    },
+
+    // 底盘原地 360° 回转：按缓入缓出曲线转动，轮组随动
+    spinBase(delta) {
+      const ui = SB.UI;
+      if (!this.manualAxisReady()) return;
+      const b = this.robot.getBasePose();
+      this.baseSpin = { from: b.yaw, to: b.yaw + delta, t: 0, dur: Math.max(2.4, Math.abs(delta) / 1.8) };
+      this.state = 'moving';
+      ui.setStatus('moving', '底盘原地回转');
+      ui.setInterlock(true, '底盘回转中');
+      ui.log('底盘原地回转 ' + Math.round(U.rad(delta)) + '°', 'info');
+    },
+
+    updateBaseSpin(dt) {
+      const s = this.baseSpin;
+      if (!s) return;
+      const ui = SB.UI;
+      s.t += dt;
+      const k = U.clamp(s.t / s.dur, 0, 1);
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      const b = this.robot.getBasePose();
+      this.robot.setBasePose(b.x, b.z, s.from + (s.to - s.from) * e);
+      if (k >= 1) {
+        const endYaw = ((s.to % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        this.robot.setBasePose(b.x, b.z, endYaw);
+        this.baseSpin = null;
+        this.state = 'ready';
+        ui.setStatus('ready', '底盘回转完成');
+        ui.setInterlock(false);
+        ui.log('底盘原地回转完成', 'ok');
+      }
     },
 
     onPose(id) {
@@ -755,6 +861,8 @@
       this.pathBase = null;
       this.pathRoute = null;
       this.pathJobs = null;
+      this.pathLift = null;
+      this.pathTurret = null;
       this.jobIndex = 0;
       this.jobOffset = 0;
       this.taskTotalLength = 0;
@@ -797,6 +905,8 @@
       this.pathBase = null;
       this.pathRoute = null;
       this.pathJobs = null;
+      this.pathLift = null;
+      this.pathTurret = null;
       this.jobIndex = 0;
       this.jobOffset = 0;
       this.taskTotalLength = 0;
@@ -1249,6 +1359,8 @@
       const savedBase = this.robot.getBasePose();
       const startJoints = this.robot.getJoints().slice();
       this.robot.setLift(this.autoLiftFor(surface, sel), true);
+      // 自动规划统一按底盘正向作业，回转平台回到 0°，避免臂座偏置方向影响可达性
+      this.robot.setTurret(0, true);
       // 规划期间会临时把底盘/关节移到各候选位姿，结束后必须恢复到用户当前位姿
       const restorePose = () => {
         this.robot.setBasePose(savedBase.x, savedBase.z, savedBase.yaw);
@@ -1301,6 +1413,8 @@
       this.pathJobs = jobs;
       this.taskTotalLength = jobs.reduce((s, j) => s + j.length, 0);
       this.applyJob(0);
+      this.pathLift = this.robot.getLift();
+      this.pathTurret = this.robot.getTurret();
       restorePose();
       this.scene.showPaths(jobs.map((j) => j.path));
       this.clearResume();
@@ -1650,6 +1764,7 @@
       if (this.baseDrive) {
         this.baseDrive = null;
       }
+      this.baseSpin = null;
       if (this.pathRun) {
         if (!clearSelection) this.captureResumeState('手动停止');
         this.pathRun = null;
@@ -1668,6 +1783,8 @@
       this.pathBase = null;
       this.pathRoute = null;
       this.pathJobs = null;
+      this.pathLift = null;
+      this.pathTurret = null;
       this.jobIndex = 0;
       this.jobOffset = 0;
       this.taskTotalLength = 0;
@@ -1960,6 +2077,9 @@
         return;
       }
       if (this.pathJobs && this.pathJobs.length) this.applyJob(0);
+      // 恢复规划时的升降与回转姿态，避免手动调整后路径基准不一致
+      if (typeof this.pathLift === 'number') this.robot.setLift(this.pathLift, true);
+      if (typeof this.pathTurret === 'number') this.robot.setTurret(this.pathTurret, true);
       this.setSpray(false, true);
       this.scene.setFollow(true, true);
       this.clearResume();
@@ -2353,6 +2473,8 @@
         pathBase: this.pathBase ? Object.assign({}, this.pathBase) : null,
         pathRoute: this.pathRoute ? this.pathRoute.slice() : null,
         jobs: this.pathJobs ? this.pathJobs.slice() : null,
+        pathLift: this.pathLift,
+        pathTurret: this.pathTurret,
         jobIndex: this.jobIndex || 0,
         jobOffset: this.jobOffset || 0,
         taskTotalLength: this.taskTotalLength || this.pathLength,
@@ -2410,6 +2532,10 @@
       this.pathBase = rs.pathBase ? Object.assign({}, rs.pathBase) : null;
       this.pathRoute = rs.pathRoute ? rs.pathRoute.slice() : [];
       this.pathJobs = rs.jobs ? rs.jobs.slice() : null;
+      this.pathLift = rs.pathLift != null ? rs.pathLift : null;
+      this.pathTurret = rs.pathTurret != null ? rs.pathTurret : null;
+      if (this.pathLift != null) this.robot.setLift(this.pathLift, true);
+      if (this.pathTurret != null) this.robot.setTurret(this.pathTurret, true);
       this.jobIndex = rs.jobIndex || 0;
       this.taskTotalLength = rs.taskTotalLength || rs.pathLength;
       if (this.pathJobs && this.pathJobs[this.jobIndex]) this.applyJob(this.jobIndex);
@@ -2729,6 +2855,7 @@
       });
       ui.setTank(this.spray.tank);
       ui.setTimer(this.taskTime);
+      ui.syncChassisAxes(this.robot.getTurret(), this.robot.getLift());
       ui.updateTakeLive({ params: this.params });
       this.syncInventoryFromTank();
       this._invClock += 0.1;
@@ -2753,6 +2880,7 @@
       const ui = SB.UI;
 
       if (!this.isLocked()) {
+        if (this.baseSpin) this.updateBaseSpin(dt);
         if (this.motion) this.updateMotion(dt);
         if (this.baseDrive) this.updateBaseDrive(dt);
         if (this.pathRun) this.updatePathRun(dt);

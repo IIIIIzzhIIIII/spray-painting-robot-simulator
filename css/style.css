@@ -57,6 +57,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .hidden { display: none !important; }
 .mt-10 { margin-top: 10px; }
 .mt-18 { margin-top: 18px; }
+.mt-12 { margin-top: 12px; }
 .full { width: 100%; }
 .small { font-size: 12px; }
 .muted { color: var(--muted); }

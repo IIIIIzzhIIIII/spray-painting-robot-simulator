@@ -158,6 +158,7 @@
       shoulderY: 0.27,
       armOffsetZ: 0.30,
       lift: { min: 0, max: 0.62, home: 0, speed: 0.34 },
+      turret: { min: 0, max: 360, home: 0, speed: 120 },
       L1: 1.05,
       L2: 0.90,
       L3: 0.56,

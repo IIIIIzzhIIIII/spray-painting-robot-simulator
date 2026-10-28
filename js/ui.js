@@ -54,6 +54,7 @@
         this.setMobileView(land ? 'none' : 'motion');
       });
       this.syncParamFill();
+      this.syncChassisAxes(0, 0);
     },
 
     on(id, event, handler) {
@@ -590,6 +591,24 @@
       const min = Number(input.min), max = Number(input.max);
       const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 50;
       input.style.setProperty('--fill', pct + '%');
+    },
+
+    // 底盘回转角度与升降高度显示同步（拖动中不覆盖滑块位置）
+    syncChassisAxes(turretDeg, lift) {
+      const t = $('turretSlider');
+      if (t && document.activeElement !== t) {
+        t.value = U.clamp(Number(turretDeg) || 0, Number(t.min), Number(t.max));
+        this.updateSliderFill(t);
+      }
+      const tv = $('turretValue');
+      if (tv) tv.textContent = U.fmt(U.clamp(Number(turretDeg) || 0, 0, 360), 0) + '°';
+      const l = $('liftSlider');
+      if (l && document.activeElement !== l) {
+        l.value = U.clamp(Number(lift) || 0, Number(l.min), Number(l.max));
+        this.updateSliderFill(l);
+      }
+      const lv = $('liftValue');
+      if (lv) lv.textContent = U.fmt(Number(lift) || 0, 2) + 'm';
     },
 
     syncParamFill() {

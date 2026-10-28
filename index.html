@@ -48,6 +48,32 @@
           <div class="joint-list" id="jointList"></div>
 
           <div class="section-head mt-18">
+            <h2>底盘回转与升降</h2>
+            <span class="chip ghost">360° 回转 · 0–0.62m</span>
+          </div>
+          <div class="joint-list">
+            <div class="joint-row">
+              <span class="joint-label">回转</span>
+              <input type="range" id="turretSlider" min="0" max="360" step="1" value="0" aria-label="回转平台角度">
+              <span class="joint-value" id="turretValue">0°</span>
+            </div>
+            <div class="joint-row">
+              <span class="joint-label">升降</span>
+              <input type="range" id="liftSlider" min="0" max="0.62" step="0.01" value="0" aria-label="升降滑台高度">
+              <span class="joint-value" id="liftValue">0.00m</span>
+            </div>
+          </div>
+          <div class="btn-row mt-12">
+            <button class="btn btn-outline btn-sm" id="btnTurret360">回转 360°</button>
+            <button class="btn btn-outline btn-sm" id="btnTurretHome">回转回正</button>
+          </div>
+          <div class="btn-row mt-12">
+            <button class="btn btn-outline btn-sm" id="btnBase360">底盘 360°</button>
+            <button class="btn btn-outline btn-sm" id="btnLiftTop">升至最高</button>
+            <button class="btn btn-outline btn-sm" id="btnLiftLow">降至最低</button>
+          </div>
+
+          <div class="section-head mt-18">
             <h2>快捷姿态</h2>
             <span class="chip ghost">一键到达</span>
           </div>
