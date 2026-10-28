@@ -50,6 +50,14 @@
       laser: new THREE.MeshStandardMaterial({ color: 0xff2b2b, emissive: 0xff2b2b, emissiveIntensity: 2.2 })
     };
 
+    const noise = this.makeSurfaceNoise();
+    [['steel', 0.0025], ['silver', 0.0018], ['white', 0.0016], ['bodyBlue', 0.0014], ['bodyBlueDark', 0.0014], ['rubber', 0.003]].forEach(([key, scale]) => {
+      const m = this.materials[key];
+      if (!m) return;
+      m.bumpMap = noise;
+      m.bumpScale = scale;
+      m.needsUpdate = true;
+    });
     this.buildChassis();
     this.buildArm();
     this.buildHose();
@@ -95,6 +103,40 @@
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   };
+  RobotRig.prototype.makeSurfaceNoise = function () {
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 128;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(128, 128);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 150 + Math.floor(Math.random() * 95);
+      img.data[i] = v; img.data[i + 1] = v; img.data[i + 2] = v; img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4, 4);
+    return tex;
+  };
+
+  RobotRig.prototype.makeWarningTexture = function () {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 64;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#f2c200';
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.strokeStyle = '#1b1f26';
+    ctx.lineWidth = 16;
+    for (let x = -64; x < 320; x += 40) {
+      ctx.beginPath();
+      ctx.moveTo(x, 64); ctx.lineTo(x + 64, 0);
+      ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+
   RobotRig.prototype.buildChassis = function () {
     const M = this.materials;
     this.chassisGroup = new THREE.Group();
@@ -108,16 +150,62 @@
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.98, 0.035, 1.32), M.steel, 'chassis', [0, 0.425, 0]);
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.90, 0.026, 1.22), M.silver, 'chassis', [0, 0.452, -0.02]);
 
-    // 中部黑色驱动轮 + 前后红色万向轮
-    const driveGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.13, 28);
+    // 中部驱动轮 + 四角万向轮：轮毂、胎面细节，可滚动/转向
+    this.driveWheels = [];
+    this.casters = [];
     [-1, 1].forEach((s) => {
-      this.addMesh(this.chassisGroup, driveGeo, M.rubber, 'chassis', [s * 0.445, 0.175, -0.10], [0, 0, Math.PI / 2]);
-      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.085, 0.085, 0.145, 24), M.steel, 'chassis', [s * 0.445, 0.175, -0.10], [0, 0, Math.PI / 2]);
+      const spin = new THREE.Group();
+      spin.position.set(s * 0.445, 0.175, -0.10);
+      this.chassisGroup.add(spin);
+      this.addMesh(spin, new THREE.CylinderGeometry(0.17, 0.17, 0.13, 28), M.rubber, 'chassis', [0, 0, 0], [0, 0, Math.PI / 2]);
+      for (let i = 0; i < 10; i++) {
+        const a = i / 10 * Math.PI * 2;
+        this.addMesh(spin, new THREE.BoxGeometry(0.132, 0.02, 0.03), M.dark, 'chassis', [0, Math.cos(a) * 0.168, Math.sin(a) * 0.168], [a, 0, 0]);
+      }
+      this.addMesh(spin, new THREE.CylinderGeometry(0.085, 0.085, 0.145, 24), M.steel, 'chassis', [0, 0, 0], [0, 0, Math.PI / 2]);
+      this.addMesh(spin, new THREE.CylinderGeometry(0.055, 0.055, 0.018, 20), M.silver, 'chassis', [s * 0.078, 0, 0], [0, 0, Math.PI / 2]);
+      this.addMesh(spin, new THREE.CylinderGeometry(0.018, 0.018, 0.03, 12), M.dark, 'chassis', [s * 0.09, 0, 0], [0, 0, Math.PI / 2]);
+      for (let i = 0; i < 5; i++) {
+        const a = i / 5 * Math.PI * 2 + 0.25;
+        this.addMesh(spin, new THREE.CylinderGeometry(0.01, 0.01, 0.014, 8), M.dark, 'chassis',
+          [s * 0.078, Math.cos(a) * 0.045, Math.sin(a) * 0.045], [0, 0, Math.PI / 2]);
+      }
+      this.driveWheels.push({ spin: spin, x: s * 0.445, radius: 0.17 });
       this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.03, 0.21, 0.13), M.dark, 'chassis', [s * 0.375, 0.175, -0.10]);
+      for (let i = 0; i < 4; i++) {
+        const a = Math.PI * (0.22 + i * 0.18);
+        this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.02, 0.018, 0.06), M.bodyBlueDark, 'chassis',
+          [s * 0.478, 0.175 + Math.sin(a) * 0.205, -0.10 + Math.cos(a) * 0.205], [a, 0, 0]);
+      }
     });
     [[-0.34, 0.46], [0.34, 0.46], [-0.34, -0.50], [0.34, -0.50]].forEach(([x, z]) => {
-      this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.09, 0.09, 0.07, 20), M.red, 'chassis', [x, 0.09, z], [0, 0, Math.PI / 2]);
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.05, 0.14, 0.05), M.dark, 'chassis', [x, 0.15, z]);
+      const steer = new THREE.Group();
+      steer.position.set(x, 0, z);
+      this.chassisGroup.add(steer);
+      const spin = new THREE.Group();
+      spin.position.y = 0.09;
+      steer.add(spin);
+      this.addMesh(spin, new THREE.CylinderGeometry(0.09, 0.09, 0.07, 20), M.red, 'chassis', [0, 0, 0], [0, 0, Math.PI / 2]);
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        this.addMesh(spin, new THREE.BoxGeometry(0.072, 0.012, 0.02), M.dark, 'chassis', [0, Math.cos(a) * 0.088, Math.sin(a) * 0.088], [a, 0, 0]);
+      }
+      this.addMesh(spin, new THREE.CylinderGeometry(0.042, 0.042, 0.075, 16), M.steel, 'chassis', [0, 0, 0], [0, 0, Math.PI / 2]);
+      [-1, 1].forEach((ss) => {
+        this.addMesh(spin, new THREE.CylinderGeometry(0.015, 0.015, 0.012, 10), M.dark, 'chassis', [ss * 0.041, 0, 0], [0, 0, Math.PI / 2]);
+        for (let i = 0; i < 3; i++) {
+          const a = i / 3 * Math.PI * 2;
+          this.addMesh(spin, new THREE.CylinderGeometry(0.008, 0.008, 0.012, 8), M.dark, 'chassis',
+            [ss * 0.038, Math.cos(a) * 0.025, Math.sin(a) * 0.025], [0, 0, Math.PI / 2]);
+        }
+      });
+      // 转向叉架与回转轴承
+      [-1, 1].forEach((ss) => {
+        this.addMesh(steer, new THREE.BoxGeometry(0.012, 0.13, 0.07), M.dark, 'chassis', [ss * 0.046, 0.145, 0]);
+      });
+      this.addMesh(steer, new THREE.BoxGeometry(0.11, 0.035, 0.075), M.dark, 'chassis', [0, 0.21, 0]);
+      this.addMesh(steer, new THREE.CylinderGeometry(0.045, 0.045, 0.03, 14), M.steel, 'chassis', [0, 0.235, 0]);
+      this.casters.push({ steer: steer, spin: spin, x: x, z: z, radius: 0.09, angle: 0 });
     });
 
     // 侧检修板、斜向散热格栅、螺栓
@@ -200,6 +288,20 @@
     });
     this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.34, 0.085), brandMat, 'chassis',
       [0, cabY0 + 0.95, rz - 0.009], [0, Math.PI, 0]);
+    // 侧出管口
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.048, 0.048, 0.06, 16), M.steel, 'chassis', [0.455, 0.78, -0.30], [0, 0, Math.PI / 2]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), M.dark, 'chassis', [0.49, 0.78, -0.30], [0, 0, Math.PI / 2]);
+    // 门铰链、锁扣与尾部警示条
+    [-1, 1].forEach((s) => {
+      [cabY0 + 0.15, cabY0 + 1.13].forEach((y) => {
+        this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.02, 0.075, 0.05), M.steel, 'chassis', [s * 0.447, y, cabZ + 0.19]);
+        this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.011, 0.011, 0.03, 8), M.steel, 'chassis', [s * 0.457, y, cabZ + 0.19], [0, 0, Math.PI / 2]);
+      });
+    });
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.055, 0.10, 0.03), M.steel, 'chassis', [0.40, cabY0 + 0.62, cabZ + 0.21]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.03, 0.04, 0.02), M.dark, 'chassis', [0.40, cabY0 + 0.62, cabZ + 0.23]);
+    const warnMat = new THREE.MeshStandardMaterial({ map: this.makeWarningTexture(), roughness: 0.55, metalness: 0.05 });
+    this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.54, 0.11), warnMat, 'chassis', [0, 0.34, -0.636], [0, Math.PI, 0]);
     // 顶部橙色警示灯
     this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.052, 0.058, 0.028, 18), M.steel, 'chassis', [0.30, cabY0 + cabH + 0.014, cabZ]);
     this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.045, 0.045, 0.065, 18), M.amber, 'chassis', [0.30, cabY0 + cabH + 0.058, cabZ]);
@@ -369,34 +471,90 @@
     this.hoseGroup = new THREE.Group();
     this.hoseGroup.name = 'Hose';
     this.scene.add(this.hoseGroup);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x20262f, roughness: 0.82, metalness: 0.08 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: this.makeHoseTexture(), roughness: 0.72, metalness: 0.06 });
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     this.hoseMesh = mesh;
     this.hoseGroup.add(mesh);
-    this._hoseStartLocal = new THREE.Vector3(0.16, 0.8, -0.28);
-    this.updateHose(true);
+    this._hoseStartLocal = new THREE.Vector3(0.49, 0.78, -0.30);
+    this._hosePts = null;
+    this._hoseVel = null;
+    this._hoseLastTarget = null;
+    this.updateHose(true, 0.016);
   };
 
-  RobotRig.prototype.updateHose = function (force) {
+  RobotRig.prototype.makeHoseTexture = function () {
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 32;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#20262f';
+    ctx.fillRect(0, 0, 64, 32);
+    for (let x = 0; x < 64; x += 8) {
+      ctx.fillStyle = '#2c3541';
+      ctx.fillRect(x, 0, 3, 32);
+      ctx.fillStyle = '#151a21';
+      ctx.fillRect(x + 4, 0, 2, 32);
+    }
+    for (let i = 0; i < 90; i++) {
+      const g = 30 + Math.floor(Math.random() * 24);
+      ctx.fillStyle = 'rgba(' + g + ',' + (g + 6) + ',' + (g + 12) + ',.35)';
+      ctx.fillRect(Math.random() * 64, Math.random() * 32, 1, 1);
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(14, 1);
+    return tex;
+  };
+
+  // 输料管目标控制点：底盘出管口 → 大臂 → 小臂 → 腕部 → 喷枪接料口
+  RobotRig.prototype.hoseTargets = function () {
+    const g = this.jointGroups;
+    const start = this.root.localToWorld(this._hoseStartLocal.clone());
+    if (g.length !== 6) return [start, this.getTCP().position.clone()];
+    const toW = (obj, p) => obj.localToWorld(p);
+    const pts = [
+      start,
+      toW(g[1], new THREE.Vector3(0, 0.165, 0.32)),
+      toW(g[1], new THREE.Vector3(0, 0.165, 0.72)),
+      toW(g[2], new THREE.Vector3(0, 0.12, 0.28)),
+      toW(g[2], new THREE.Vector3(0, 0.10, 0.64)),
+      toW(g[4], new THREE.Vector3(0, -0.055, 0.03))
+    ];
+    const endParent = this.toolMount || this.nozzleGroup || this.tcp;
+    const endLocal = new THREE.Vector3(0, -0.085, 0.17);
+    pts.push(endParent.localToWorld(endLocal));
+    return pts;
+  };
+
+  RobotRig.prototype.updateHose = function (force, dt) {
     if (!this.hoseMesh) return;
     this.root.updateMatrixWorld(true);
-    const start = this.root.localToWorld(this._hoseStartLocal.clone());
-    const tcp = this.getTCP();
-    const end = tcp.position.clone().addScaledVector(tcp.direction, -0.05);
-    if (!force && this._hoseLastEnd && this._hoseLastEnd.distanceTo(end) < 0.012) return;
-    this._hoseLastEnd = end.clone();
-    const mid = start.clone().lerp(end, 0.5);
-    mid.y -= 0.22;
-    const q1 = start.clone().lerp(mid, 0.55);
-    q1.y -= 0.06;
-    q1.x += 0.12;
-    const q2 = mid.clone().lerp(end, 0.55);
-    q2.y -= 0.02;
-    q2.z += 0.06;
-    const curve = new THREE.CatmullRomCurve3([start, q1, mid, q2, end], false, 'catmullrom', 0.4);
-    const geo = new THREE.TubeGeometry(curve, 36, 0.021, 7, false);
+    const targets = this.hoseTargets();
+    const n = targets.length;
+    const endJump = this._hoseLastTarget ? targets[n - 1].distanceTo(this._hoseLastTarget) : 0;
+    if (force || !this._hosePts || this._hosePts.length !== n || endJump > 0.55) {
+      this._hosePts = targets.map((p) => p.clone());
+      this._hoseVel = targets.map(() => new THREE.Vector3());
+    } else {
+      const h = Math.max(0.016, Math.min(0.12, dt || 0.09));
+      const stiffness = 34, damping = 9, maxV = 5.5;
+      for (let i = 1; i < n - 1; i++) {
+        const p = this._hosePts[i], v = this._hoseVel[i], t = targets[i];
+        const ty = t.y - 0.018 * Math.sin(Math.PI * i / (n - 1));
+        v.x += ((t.x - p.x) * stiffness - v.x * damping) * h;
+        v.y += ((ty - p.y) * stiffness - v.y * damping) * h;
+        v.z += ((t.z - p.z) * stiffness - v.z * damping) * h;
+        v.clampLength(0, maxV);
+        p.addScaledVector(v, h);
+      }
+      this._hosePts[0].copy(targets[0]);
+      this._hosePts[n - 1].copy(targets[n - 1]);
+    }
+    this._hoseLastTarget = targets[n - 1].clone();
+    const curve = new THREE.CatmullRomCurve3(this._hosePts, false, 'catmullrom', 0.35);
+    const geo = new THREE.TubeGeometry(curve, 52, 0.022, 8, false);
     this.hoseMesh.geometry.dispose();
     this.hoseMesh.geometry = geo;
   };
@@ -426,7 +584,6 @@
     this.root.position.set(this.basePos.x, 0, this.basePos.z);
     this.root.rotation.y = this.baseYaw;
     this.root.updateMatrixWorld(true);
-    this.updateHose(true);
   };
 
   RobotRig.prototype.getBasePose = function () {
@@ -518,12 +675,53 @@
     }
   };
 
+  RobotRig.prototype.updateWheels = function (dt) {
+    if (!this.driveWheels || !this.casters) return;
+    if (!this._wheelLast) {
+      this._wheelLast = { x: this.basePos.x, z: this.basePos.z, yaw: this.baseYaw };
+      return;
+    }
+    const last = this._wheelLast;
+    const dx = this.basePos.x - last.x;
+    const dz = this.basePos.z - last.z;
+    const dyaw = U.norm180(this.baseYaw - last.yaw);
+    if (Math.hypot(dx, dz) > 0.6 || Math.abs(dyaw) > 0.8) {
+      this._wheelLast = { x: this.basePos.x, z: this.basePos.z, yaw: this.baseYaw };
+      return;
+    }
+    if (Math.hypot(dx, dz) < 1e-5 && Math.abs(dyaw) < 1e-5) return;
+    const cos = Math.cos(last.yaw), sin = Math.sin(last.yaw);
+    const lx = dx * cos - dz * sin;
+    const lz = dx * sin + dz * cos;
+    const omega = dt > 1e-4 ? dyaw / dt : 0;
+    // 驱动轮随行进/差速转动
+    this.driveWheels.forEach((w) => {
+      w.spin.rotation.x += (lz - omega * w.x) / w.radius;
+    });
+    // 万向轮：按该轮处的合成速度转向，并沿滚动方向自转
+    this.casters.forEach((c) => {
+      const vx = lx + omega * c.z;
+      const vz = lz - omega * c.x;
+      const speed = Math.hypot(vx, vz);
+      if (speed < 0.004) return;
+      const target = Math.atan2(vx, vz);
+      const diff = U.norm180(target - c.angle);
+      const step = Math.min(Math.abs(diff), (2.2 + speed * 2.5) * dt);
+      c.angle = U.norm180(c.angle + Math.sign(diff) * step);
+      c.steer.rotation.y = c.angle;
+      const along = vx * Math.sin(c.angle) + vz * Math.cos(c.angle);
+      c.spin.rotation.x += along / c.radius;
+    });
+    this._wheelLast = { x: this.basePos.x, z: this.basePos.z, yaw: this.baseYaw };
+  };
+
   RobotRig.prototype.update = function (dt) {
     this._hoseClock += dt;
     if (this._hoseClock > 0.09) {
       this._hoseClock = 0;
-      this.updateHose(false);
+      this.updateHose(false, 0.09);
     }
+    this.updateWheels(dt);
   };
   RobotRig.prototype.computeHomeJoints = function () {
     // 目标点按底盘当前朝向转换到世界坐标，侧墙作业时也保持在机器人正前方
