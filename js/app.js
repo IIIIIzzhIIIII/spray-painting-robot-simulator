@@ -122,7 +122,9 @@
 
     loadParams() {
       const saved = SB.UI.readParams();
-      this.materialId = saved ? saved.material : 'putty';
+      const scene = C.getScene(C.currentScene);
+      const fallback = (scene && C.materials[scene.coating]) ? scene.coating : 'putty';
+      this.materialId = saved ? saved.material : fallback;
       this.params = saved ? saved.params : U.clone(C.materials[this.materialId].defaults);
       SB.UI.setParams(this.params, this.materialId);
       this.spray.setMaterial(this.materialId);
@@ -1093,6 +1095,7 @@
       if (f.isWall) {
         const c = this.scene.surfacePoint(surface, cu, cv, 0);
         const n = f.normal, u = f.uDir;
+        push(c.x + n[0] * 1.0, c.z + n[2] * 1.0);
         push(c.x + n[0] * 1.25, c.z + n[2] * 1.25);
         push(c.x + n[0] * 1.65, c.z + n[2] * 1.65);
         push(c.x + n[0] * 2.25, c.z + n[2] * 2.25);
@@ -1126,9 +1129,11 @@
       }
       const R = C.room;
       const vias = [{ x: 0, z: 0 }];
-      for (let i = -1; i <= 1; i++) {
-        for (let j = -1; j <= 1; j++) {
-          vias.push({ x: i * R.width * 0.24, z: j * R.depth * 0.24 });
+      // 更密的绕行点，便于绕过厂房内的设备/立柱到达墙角
+      for (let i = -2; i <= 2; i++) {
+        for (let j = -2; j <= 2; j++) {
+          if (i === 0 && j === 0) continue;
+          vias.push({ x: i * R.width * 0.18, z: j * R.depth * 0.18 });
         }
       }
       for (let i = 0; i < vias.length; i++) {
@@ -1236,9 +1241,14 @@
         this.robot.setJoints(startJoints);
         this.lastSafeJoints = startJoints.slice();
       };
-      const single = this.planRect(surface, sel, savedBase, startJoints);
+      // 大选区直接分区，避免先尝试覆盖整面的超长单点路径（会非常耗时且不可达）
+      const spanU = sel.maxX - sel.minX;
+      const spanV = sel.maxY - sel.minY;
+      const singleViable = spanU <= 3.2 && (C.isWallSurface(surface) || spanV <= 3.2);
+      const single = singleViable ? this.planRect(surface, sel, savedBase, startJoints) : null;
       let jobs = [];
       let panelized = false;
+      let skippedPanels = 0;
       if (single && single.unreachable <= 8) {
         jobs = [single];
       } else {
@@ -1257,11 +1267,13 @@
             list.push(job);
             from = job.base;
           });
-          if (list.length === panels.length) {
+          if (list.length) {
             const bad = list.reduce((s, j) => s + j.unreachable, 0);
-            if (!single || bad < single.unreachable) {
+            // 个别分区无可用底盘路线时保留其余分区，避免退回整面单点路径
+            if (!single || list.length < panels.length || bad < single.unreachable) {
               jobs = list;
               panelized = true;
+              skippedPanels = panels.length - list.length;
             }
           }
         }
@@ -1284,11 +1296,15 @@
       let est = driveDist / C.baseSpeed;
       jobs.forEach((j) => { est += this.jobTime(j, p.speed); });
       ui.setSelectInfo('路径 ' + points + ' 点 · ' + this.taskTotalLength.toFixed(1) + ' m' +
-        (panelized ? ' · ' + jobs.length + ' 分区' : '') + ' · 底盘 ' + driveDist.toFixed(1) +
+        (panelized ? ' · ' + jobs.length + ' 分区' + (skippedPanels ? '（跳过 ' + skippedPanels + '）' : '') : '') +
+        ' · 底盘 ' + driveDist.toFixed(1) +
         ' m · 预计 ' + U.fmtTime(est));
       ui.log('S 形路径生成：' + this.surfaceName(surface) + ' ' + points + ' 点，总长 ' +
         this.taskTotalLength.toFixed(2) + ' m，行距 ' + Math.max(0.05, (p.fanWidth || 0.3) * 0.5).toFixed(3) +
         ' m' + (panelized ? '，分 ' + jobs.length + ' 个分区' : ''), 'ok');
+      if (skippedPanels) {
+        ui.log('有 ' + skippedPanels + ' 个分区无可用底盘路线，已跳过（可调整场景内障碍物后重试）', 'warn');
+      }
       const unreachable = jobs.reduce((s, j) => s + j.unreachable, 0);
       if (unreachable > 0) {
         if (this._roomMode) {

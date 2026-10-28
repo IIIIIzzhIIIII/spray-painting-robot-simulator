@@ -45,7 +45,9 @@
       red: new THREE.MeshStandardMaterial({ color: 0xd23c2f, metalness: 0.2, roughness: 0.55 }),
       glass: new THREE.MeshPhysicalMaterial({ color: 0xcbe7f7, metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.42 }),
       led: new THREE.MeshStandardMaterial({ color: 0x22d37a, emissive: 0x22d37a, emissiveIntensity: 2.0 }),
-      orange: new THREE.MeshStandardMaterial({ color: 0xff8a1e, metalness: 0.2, roughness: 0.45 })
+      orange: new THREE.MeshStandardMaterial({ color: 0xff8a1e, metalness: 0.2, roughness: 0.45 }),
+      amber: new THREE.MeshStandardMaterial({ color: 0xffa31a, emissive: 0xff8a00, emissiveIntensity: 0.85, roughness: 0.32 }),
+      laser: new THREE.MeshStandardMaterial({ color: 0xff2b2b, emissive: 0xff2b2b, emissiveIntensity: 2.2 })
     };
 
     this.buildChassis();
@@ -189,6 +191,42 @@
     }
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.06, 0.08, 0.02), M.red, 'chassis', [0.35, 0.20, -0.638]);
 
+    /* 细节：铭牌、顶部警示灯、拉手、防撞条与散热栅 */
+    const brandTex = this.labelTexture('QZ-1', 'FUNCTIONAL COATING ROBOT');
+    const brandMat = new THREE.MeshStandardMaterial({ map: brandTex, roughness: 0.55, metalness: 0.12 });
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.42, 0.105), brandMat, 'chassis',
+        [s * 0.447, cabY0 + 0.62, cabZ], [0, s * Math.PI / 2, 0]);
+    });
+    this.addMesh(this.chassisGroup, new THREE.PlaneGeometry(0.34, 0.085), brandMat, 'chassis',
+      [0, cabY0 + 0.95, rz - 0.009], [0, Math.PI, 0]);
+    // 顶部橙色警示灯
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.052, 0.058, 0.028, 18), M.steel, 'chassis', [0.30, cabY0 + cabH + 0.014, cabZ]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.045, 0.045, 0.065, 18), M.amber, 'chassis', [0.30, cabY0 + cabH + 0.058, cabZ]);
+    this.addMesh(this.chassisGroup, new THREE.SphereGeometry(0.045, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.amber, 'chassis', [0.30, cabY0 + cabH + 0.09, cabZ]);
+    // 顶部拉手
+    [-0.24, 0.24].forEach((x) => {
+      [-0.07, 0.07].forEach((dz) => {
+        this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.018, 0.055, 0.018), M.steel, 'chassis', [x, cabY0 + cabH + 0.028, cabZ + dz]);
+      });
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.018, 0.018, 0.16), M.steel, 'chassis', [x, cabY0 + cabH + 0.055, cabZ]);
+    });
+    // 顶部散热栅
+    for (let i = 0; i < 5; i++) {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.5, 0.005, 0.012), M.dark, 'chassis', [0, cabY0 + cabH + 0.009, cabZ - 0.14 + i * 0.045]);
+    }
+    // 四角橡胶防撞块 + 黄色反光条
+    [[-0.462, 0.61], [0.462, 0.61], [-0.462, -0.61], [0.462, -0.61]].forEach(([x, z]) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.03, 0.16, 0.05), M.rubber, 'chassis', [x, 0.29, z]);
+    });
+    [-1, 1].forEach((s) => {
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.006, 0.028, 1.02), M.yellow, 'chassis', [s * 0.467, 0.225, 0]);
+    });
+    // 后部盘绕电缆与接头
+    this.addMesh(this.chassisGroup, new THREE.TorusGeometry(0.07, 0.012, 6, 18), M.rubber, 'chassis', [0.22, 0.82, rz - 0.02]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.028, 0.028, 0.05, 14), M.steel, 'chassis', [0.22, 0.72, rz - 0.03], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.034, 0.034, 0.012, 14), M.red, 'chassis', [0.22, 0.70, rz - 0.03], [Math.PI / 2, 0, 0]);
+
     /* 前立柱升降导轨（视觉结构，不新增运动轴） */
     const railZ = cabZ + cabD / 2 + 0.012;
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.075, 1.10, 0.028), M.dark, 'chassis', [-0.33, 1.02, railZ]);
@@ -263,6 +301,34 @@
     this.addMesh(j6, new THREE.BoxGeometry(0.13, 0.115, 0.14), M.white, 'arm', [0, 0, 0.10]);
     this.addMesh(j6, new THREE.BoxGeometry(0.135, 0.02, 0.14), M.bodyBlue, 'arm', [0, 0.055, 0.10]);
 
+    /* 关节细节：伺服电机罩、紧固螺栓、走线卡箍与腕部护套 */
+    this.addMesh(j2, new THREE.CylinderGeometry(0.115, 0.115, 0.15, 20), M.dark, 'arm', [-0.235, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j2, new THREE.CylinderGeometry(0.10, 0.10, 0.03, 20), M.steel, 'arm', [-0.32, 0, 0], [0, 0, Math.PI / 2]);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      this.addMesh(j2, new THREE.CylinderGeometry(0.012, 0.012, 0.012, 8), M.steel, 'arm',
+        [0.176, Math.cos(a) * 0.13, Math.sin(a) * 0.13], [0, 0, Math.PI / 2]);
+    }
+    [0.30, 0.58, 0.82].forEach((z, i) => {
+      this.addMesh(j2, new THREE.BoxGeometry(0.2, 0.028, 0.03), i % 2 ? M.steel : M.dark, 'arm', [0, 0.122, z]);
+    });
+    this.addMesh(j2, new THREE.CylinderGeometry(0.012, 0.012, 0.72, 8), M.steel, 'arm', [0.075, 0.132, 0.48], [Math.PI / 2, 0, 0]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.10, 0.10, 0.13, 20), M.dark, 'arm', [-0.20, 0, 0], [0, 0, Math.PI / 2]);
+    this.addMesh(j3, new THREE.CylinderGeometry(0.088, 0.088, 0.03, 20), M.steel, 'arm', [-0.27, 0, 0], [0, 0, Math.PI / 2]);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      this.addMesh(j3, new THREE.CylinderGeometry(0.011, 0.011, 0.012, 8), M.steel, 'arm',
+        [0.166, Math.cos(a) * 0.11, Math.sin(a) * 0.11], [0, 0, Math.PI / 2]);
+    }
+    [0.24, 0.49, 0.73].forEach((z, i) => {
+      this.addMesh(j3, new THREE.TorusGeometry(0.086, 0.011, 6, 18), i % 2 ? M.bodyBlue : M.dark, 'arm', [0, 0, z]);
+    });
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2;
+      this.addMesh(j4, new THREE.CylinderGeometry(0.01, 0.01, 0.01, 8), M.steel, 'arm',
+        [Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0.128], [Math.PI / 2, 0, 0]);
+    }
+
     // 末端工具安装座（喷涂枪 / 刮刀 / 砂盘共用）
     this.toolMount = new THREE.Group();
     this.toolMount.name = 'ToolMount';
@@ -278,6 +344,19 @@
     this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.05, 0.062, 0.04, 20), M.dark, 'nozzle', [0, 0, 0.315], [Math.PI / 2, 0, 0]);
     this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.014, 0.048, 0.045, 20), M.violet, 'nozzle', [0, 0, 0.328], [Math.PI / 2, 0, 0]);
     this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.02, 0.02, 0.06, 12), M.bodyBlue, 'nozzle', [0, 0.072, 0.215], [0, 0, Math.PI / 2]);
+
+    /* 喷枪细节：气帽锁环、压力表、气液接头与激光定位 */
+    this.addMesh(this.nozzleGroup, new THREE.TorusGeometry(0.05, 0.011, 8, 20), M.steel, 'nozzle', [0, 0, 0.334]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.058, 0.058, 0.018, 6), M.dark, 'nozzle', [0, 0, 0.306], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.032, 0.032, 0.02, 16), M.silver, 'nozzle', [0.075, 0.05, 0.245], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.026, 0.026, 0.006, 16), M.white, 'nozzle', [0.075, 0.05, 0.257], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.002, 0.019, 0.002), M.red, 'nozzle', [0.075, 0.058, 0.261]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.018, 0.018, 0.05, 10), M.steel, 'nozzle', [0.06, -0.055, 0.19], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.023, 0.023, 0.008, 12), M.bodyBlue, 'nozzle', [0.06, -0.055, 0.215], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.015, 0.015, 0.045, 10), M.steel, 'nozzle', [-0.05, -0.06, 0.19], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.02, 0.02, 0.008, 12), M.red, 'nozzle', [-0.05, -0.06, 0.212], [Math.PI / 2, 0, 0]);
+    this.addMesh(this.nozzleGroup, new THREE.BoxGeometry(0.036, 0.028, 0.05), M.dark, 'nozzle', [0.045, 0.056, 0.195]);
+    this.addMesh(this.nozzleGroup, new THREE.CylinderGeometry(0.008, 0.008, 0.012, 10), M.laser, 'nozzle', [0.045, 0.056, 0.226], [Math.PI / 2, 0, 0]);
 
     this.tcp = new THREE.Object3D();
     this.tcp.name = 'TCP';

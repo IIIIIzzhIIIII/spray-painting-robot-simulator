@@ -25,7 +25,7 @@
     selectionGroup: null,
     pathGroup: null,
     roomGroup: null,
-    currentScene: 'residence',
+    currentScene: C.defaultScene,
     surface: 'wall',
     tween: null,
     quality: 'high',
@@ -354,7 +354,7 @@
       this.buildSceneProps(group, scene, { add, addObstacle, wallMat2, metal, darkMetal, accentMat, lampMat, wallMat });
 
       // 顶部灯具按场景布置
-      if (scene.appearance === 'residence' || scene.appearance === 'electrical') {
+      if (scene.appearance === 'electrical') {
         add(new THREE.BoxGeometry(R.width * 0.24, 0.05, 0.34), lampMat, -R.width * 0.1, R.height - 0.06, -R.depth * 0.15);
         add(new THREE.BoxGeometry(R.width * 0.24, 0.05, 0.34), lampMat, R.width * 0.18, R.height - 0.06, R.depth * 0.2);
       } else {
@@ -376,10 +376,6 @@
       const add = M.add;
       const a = scene.appearance;
 
-      if (a === 'residence') {
-        return;
-      }
-
       if (a === 'cleanroom') {
         const seam = new THREE.MeshStandardMaterial({ color: 0xc9d9e7, roughness: 0.65 });
         for (let i = 1; i < 8; i++) {
@@ -388,15 +384,8 @@
           add(new THREE.BoxGeometry(0.012, R.height - 0.25, 0.016), seam, -R.width / 2 + 0.012, R.height / 2, -R.depth / 2 + (R.depth / 7) * i, false, false);
         }
         add(new THREE.BoxGeometry(R.width, 0.014, 0.012), seam, 0, R.height * 0.62, R.wallZ + 0.012, false, false);
-        // 洁净工作台
-        add(new THREE.BoxGeometry(2.6, 0.85, 0.72), M.metal, -R.width / 2 + 1.7, 0.425, -R.depth * 0.22);
-        add(new THREE.BoxGeometry(2.6, 0.06, 0.8), M.darkMetal, -R.width / 2 + 1.7, 0.88, -R.depth * 0.22);
-        add(new THREE.BoxGeometry(2.2, 0.85, 0.72), M.metal, -R.width / 2 + 1.6, 0.425, R.depth * 0.22);
-        add(new THREE.BoxGeometry(2.2, 0.06, 0.8), M.darkMetal, -R.width / 2 + 1.6, 0.88, R.depth * 0.22);
-        M.addObstacle('洁净工作台A', -R.width / 2 + 0.4, 0, -R.depth * 0.22 - 0.4, -R.width / 2 + 3.0, 0.95, -R.depth * 0.22 + 0.4);
-        M.addObstacle('洁净工作台B', -R.width / 2 + 0.5, 0, R.depth * 0.22 - 0.4, -R.width / 2 + 2.7, 0.95, R.depth * 0.22 + 0.4);
         // 送风管
-        add(new THREE.BoxGeometry(R.width * 0.7, 0.34, 0.42), M.metal, 0, R.height - 0.3, R.wallZ + 0.6);
+        add(new THREE.BoxGeometry(R.width * 0.7, 0.42, 0.52), M.metal, 0, R.height - 0.36, R.wallZ + 0.72);
         // 地面导视线
         const lineMat = new THREE.MeshBasicMaterial({ color: 0x3b8fd6, transparent: true, opacity: 0.5 });
         const line = new THREE.Mesh(new THREE.PlaneGeometry(R.width * 0.8, 0.05), lineMat);
@@ -410,25 +399,25 @@
         // 钢柱
         [[-R.width * 0.36, -R.depth * 0.32], [R.width * 0.36, -R.depth * 0.32],
          [-R.width * 0.36, R.depth * 0.28], [R.width * 0.36, R.depth * 0.28]].forEach((pos, i) => {
-          add(new THREE.BoxGeometry(0.26, R.height, 0.26), M.darkMetal, pos[0], R.height / 2, pos[1]);
-          M.addObstacle('钢柱' + (i + 1), pos[0] - 0.16, 0, pos[1] - 0.16, pos[0] + 0.16, R.height, pos[1] + 0.16);
+          add(new THREE.BoxGeometry(0.34, R.height, 0.34), M.darkMetal, pos[0], R.height / 2, pos[1]);
+          M.addObstacle('钢柱' + (i + 1), pos[0] - 0.2, 0, pos[1] - 0.2, pos[0] + 0.2, R.height, pos[1] + 0.2);
         });
         // 屋面桁架
         for (let i = 0; i < 4; i++) {
           const z = -R.depth * 0.36 + i * R.depth * 0.24;
-          add(new THREE.BoxGeometry(R.width, 0.12, 0.12), M.darkMetal, 0, R.height - 0.32, z, false, false);
+          add(new THREE.BoxGeometry(R.width, 0.16, 0.16), M.darkMetal, 0, R.height - 0.36, z, false, false);
         }
         // 工业吊灯
         for (let i = 0; i < 3; i++) {
           const x = -R.width * 0.25 + i * R.width * 0.25;
-          add(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), M.darkMetal, x, R.height - 0.55, -R.depth * 0.05, false, false);
-          add(new THREE.ConeGeometry(0.28, 0.3, 14), M.lampMat, x, R.height - 0.78, -R.depth * 0.05, false, false);
+          add(new THREE.CylinderGeometry(0.035, 0.035, 0.62, 8), M.darkMetal, x, R.height - 0.62, -R.depth * 0.05, false, false);
+          add(new THREE.ConeGeometry(0.34, 0.36, 14), M.lampMat, x, R.height - 0.9, -R.depth * 0.05, false, false);
         }
         // 沿墙管线
-        const pipe = new THREE.CylinderGeometry(0.1, 0.1, R.depth * 0.75, 12);
-        const p1 = add(pipe, M.metal, -R.width / 2 + 0.3, R.height * 0.66, 0);
+        const pipe = new THREE.CylinderGeometry(0.13, 0.13, R.depth * 0.75, 12);
+        const p1 = add(pipe, M.metal, -R.width / 2 + 0.36, R.height * 0.66, 0);
         p1.rotation.x = Math.PI / 2;
-        const p2 = add(new THREE.CylinderGeometry(0.07, 0.07, R.depth * 0.7, 10), M.accentMat, -R.width / 2 + 0.5, R.height * 0.55, 0);
+        const p2 = add(new THREE.CylinderGeometry(0.09, 0.09, R.depth * 0.7, 10), M.accentMat, -R.width / 2 + 0.6, R.height * 0.55, 0);
         p2.rotation.x = Math.PI / 2;
         // 安全地标线
         const stripeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(scene.colors.accent), transparent: true, opacity: 0.45 });
@@ -445,8 +434,8 @@
         // 储罐
         const tankMat = new THREE.MeshStandardMaterial({ color: 0xd3d8dd, roughness: 0.34, metalness: 0.55 });
         const tanks = [
-          { x: -R.width * 0.27, z: -R.depth * 0.2, r: 1.05, h: 2.45 },
-          { x: R.width * 0.28, z: -R.depth * 0.28, r: 0.9, h: 2.2 }
+          { x: -R.width * 0.27, z: -R.depth * 0.2, r: 1.3, h: 2.8 },
+          { x: R.width * 0.28, z: -R.depth * 0.28, r: 1.15, h: 2.55 }
         ];
         tanks.forEach((t, i) => {
           add(new THREE.CylinderGeometry(t.r, t.r, t.h, 28), tankMat, t.x, t.h / 2, t.z);
@@ -484,9 +473,9 @@
           for (let i = 0; i < 3; i++) {
             const z = -R.depth * 0.3 + i * R.depth * 0.3;
             const x = side * (R.width / 2 - 0.55);
-            add(new THREE.BoxGeometry(0.85, 2.1, 0.9), i % 2 ? cabMat2 : cabMat, x, 1.05, z);
-            add(new THREE.BoxGeometry(0.02, 1.9, 0.7), M.darkMetal, x - side * 0.44, 1.05, z, false, false);
-            M.addObstacle('配电柜', x - 0.45, 0, z - 0.45, x + 0.45, 2.1, z + 0.45);
+            add(new THREE.BoxGeometry(1.0, 2.35, 1.0), i % 2 ? cabMat2 : cabMat, x, 1.175, z);
+            add(new THREE.BoxGeometry(0.025, 2.12, 0.78), M.darkMetal, x - side * 0.52, 1.175, z, false, false);
+            M.addObstacle('配电柜', x - 0.52, 0, z - 0.52, x + 0.52, 2.35, z + 0.52);
           }
         });
         // 电缆桥架

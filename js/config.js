@@ -55,23 +55,12 @@
     }
   };
 
-  /* 不同喷涂场景使用不同尺寸与室内布置，切换时重建房间 */
+  /* 不同厂房场景使用不同尺寸与室内布置，切换时重建房间 */
   const SCENES = [
-    {
-      id: 'residence', name: '住宅装饰', short: '住宅',
-      desc: '腻子找平 · 乳胶漆面漆',
-      width: 9, depth: 7, height: 3.2, appearance: 'residence',
-      colors: { wall: '#eeebe4', wall2: '#e3dfd5', floor: '#cbc7be', ceiling: '#f2f0eb', accent: '#f0b400' },
-      start: { x: 0, z: 0.4, yaw: Math.PI },
-      window: { z: 0.7, y: 1.9, w: 2.2, h: 1.2, sill: 1.3 },
-      door: { x: 1.9, w: 1.1, h: 2.1 },
-      pilaster: { x: 2.6, z: -3.37, w: 0.48, d: 0.28, h: 3.2 },
-      coating: 'putty'
-    },
     {
       id: 'cleanroom', name: '电子洁净厂房', short: '洁净厂房',
       desc: '防静电自流平 + 洁净墙板',
-      width: 10, depth: 7.5, height: 3.3, appearance: 'cleanroom',
+      width: 12, depth: 9, height: 3.3, appearance: 'cleanroom',
       colors: { wall: '#f5f8fb', wall2: '#e9f1f8', floor: '#cfdde8', ceiling: '#f8fbfe', accent: '#2f8fe8' },
       start: { x: 0, z: 0.8, yaw: Math.PI },
       coating: 'qzds-001'
@@ -79,7 +68,7 @@
     {
       id: 'steel', name: '钢结构防火厂房', short: '钢结构厂房',
       desc: '钢结构防火涂料 + 工业地坪',
-      width: 11, depth: 8, height: 3.4, appearance: 'steel',
+      width: 13.5, depth: 9.5, height: 3.4, appearance: 'steel',
       colors: { wall: '#b9c3cd', wall2: '#a7b2be', floor: '#9aa0a6', ceiling: '#6f7c8b', accent: '#e7a100' },
       start: { x: 0, z: 0.8, yaw: Math.PI },
       coating: 'qzds-008'
@@ -87,7 +76,7 @@
     {
       id: 'storage', name: '防爆储罐区', short: '储罐区',
       desc: '储罐抗爆涂层 + 防爆地坪',
-      width: 11, depth: 8, height: 3.4, appearance: 'storage',
+      width: 13.5, depth: 9.5, height: 3.4, appearance: 'storage',
       colors: { wall: '#c8cdd2', wall2: '#b8bec5', floor: '#a8adb2', ceiling: '#aeb5bd', accent: '#d97706' },
       start: { x: 0, z: 0.8, yaw: Math.PI },
       coating: 'qzds-013'
@@ -95,7 +84,7 @@
     {
       id: 'electrical', name: '绝缘配电房', short: '配电房',
       desc: '绝缘导热涂层 + 设备基础',
-      width: 9, depth: 7, height: 3.2, appearance: 'electrical',
+      width: 11, depth: 8.4, height: 3.2, appearance: 'electrical',
       colors: { wall: '#eef2f6', wall2: '#e2e8ef', floor: '#c4cbd4', ceiling: '#f2f5f8', accent: '#2f8fe8' },
       start: { x: 0, z: 0.5, yaw: Math.PI },
       coating: 'qzds-019'
@@ -163,7 +152,7 @@
     },
     baseSpeed: 0.62,
     robot: {
-      position: { x: 0, y: 0, z: 0.4 },
+      position: { x: scene0.start.x, y: 0, z: scene0.start.z },
       yawOffset: Math.PI,
       baseY: 0.78,
       shoulderY: 0.27,
