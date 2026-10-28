@@ -1077,10 +1077,12 @@
       const cv = (sel.minY + sel.maxY) / 2;
       const cur = this.robot.getBasePose();
       const out = [];
+      // 墙面允许更贴近立柱/墙角选位，提升拐角可达；天花板/地面仍保持较大余量
+      const baseMargin = (surface === 'ceiling' || surface === 'floor') ? 0.66 : 0.55;
       const push = (x, z) => {
         x = U.clamp(x, -R.width / 2 + 0.9, R.width / 2 - 0.9);
         z = U.clamp(z, -R.depth / 2 + 0.9, R.depth / 2 - 0.9);
-        if (!this.scene.checkBaseAt(x, z, 0.66)) return;
+        if (!this.scene.checkBaseAt(x, z, baseMargin)) return;
         if (surface === 'floor' && x > sel.minX - 0.55 && x < sel.maxX + 0.55 &&
           z > sel.minY - 0.55 && z < sel.maxY + 0.55) return;
         const yaw = this.baseYawFor(x, z, surface, cu, cv);
@@ -1117,8 +1119,8 @@
       return out;
     },
 
-    baseRoute(from, to) {
-      const margin = 0.66;
+    baseRoute(from, to, baseMargin) {
+      const margin = baseMargin == null ? 0.55 : baseMargin;
       if (this.scene.checkBaseRoute(from, to, margin)) {
         return [{ x: from.x, z: from.z, yaw: from.yaw }, { x: to.x, z: to.z, yaw: to.yaw }];
       }
@@ -1243,7 +1245,7 @@
         // 选区超出单点作业范围时，沿墙面长度方向分成多个分区，
         // 每个分区由底盘重新定位后再用机械臂全伸喷涂
         const maxSpan = C.isWallSurface(surface)
-          ? (this._roomMode ? 1.6 : 2.6)
+          ? 1.6
           : (this._roomMode ? 2.0 : 2.4);
         const panels = this.splitPanels(surface, sel, maxSpan);
         if (panels.length > 1) {
@@ -1301,6 +1303,18 @@
       }
     },
 
+    // 墙面越靠近顶部，喷枪逐渐上仰：腕部随之后移下沉，使 TCP 能达到墙顶阴角
+    sprayDirection(surface, v) {
+      const f = C.surfaceFrame(surface);
+      const n = this.scene.surfaceNormal(surface);
+      if (!f.isWall) return n;
+      const start = f.vMax - 0.55;
+      if (v <= start) return n;
+      const k = U.clamp((v - start) / 0.55, 0, 1);
+      const th = k * 0.6;
+      return new THREE.Vector3(n.x * Math.cos(th), Math.sin(th), n.z * Math.cos(th));
+    },
+
     // 以给定底盘位姿为起点，为单个矩形选区规划 S 形路径
     planRect(surface, sel, fromBase, startJoints) {
       const p = this.params;
@@ -1312,14 +1326,20 @@
       const overshoot = Math.min(0.04, fan * 0.12);
       const sf = C.surfaceFrame(surface);
       const halfU = sf.width / 2;
-      // 拐角安全距离：喷枪垂直作业面时，腕部沿喷枪方向回缩，横向位置与 TCP 相同。
-      // 路径若贴到相邻墙面 3cm 内，运行时会被判定擦墙并停机，因此边缘必须留出腕部余量，
-      // 边缘未覆盖的窄条由扇形雾化半径自然补齐。
-      const edgeU = U.clamp(fan * 0.42, 0.10, 0.14);
+      // 拐角安全距离：喷枪垂直作业面时，腕部横向位置与 TCP 相同，
+      // 因此路径边缘不能贴死墙角，留出的窄条由扇形雾化半径补齐。
+      // 墙面允许更贴近两侧墙角（运行时不因擦墙停机，边界由扇幅补齐）；
+      // 天花板/地面仍留较大余量，避免机械臂大幅穿入相邻墙面
+      const edgeU = sf.isWall
+        ? U.clamp(fan * 0.2, 0.03, 0.06)
+        : U.clamp(fan * 0.42, 0.10, 0.14);
       const edgeV = sf.isWall ? 0.08 : U.clamp(fan * 0.42, 0.10, 0.14);
       const uMin = -halfU + Math.max(0.02, edgeU);
       const uMax = halfU - Math.max(0.02, edgeU);
-      const vLimit = { min: sf.vMin + Math.max(0.08, edgeV), max: sf.vMax - Math.max(0.08, edgeV) };
+      // 墙面上沿只留 3cm：喷枪上仰后仍可达，扇幅再补齐到墙顶阴角
+      const vLimit = sf.isWall
+        ? { min: sf.vMin + 0.08, max: sf.vMax - 0.03 }
+        : { min: sf.vMin + Math.max(0.08, edgeV), max: sf.vMax - Math.max(0.08, edgeV) };
       let minU = U.clamp(sel.minX - overshoot, uMin, uMax);
       let maxU = U.clamp(sel.maxX + overshoot, uMin, uMax);
       let minV = U.clamp(sel.minY - overshoot, vLimit.min, vLimit.max);
@@ -1436,7 +1456,6 @@
         });
       }
 
-      const normal = this.scene.surfaceNormal(surface);
       if (dense.length) {
         // 在分区中心增加引入/引出点：从舒适位姿进入与退出，
         // 避免从房间角落或贴地位置开始/结束而引发接近或折叠碰撞（拐角尤其明显）。
@@ -1481,10 +1500,18 @@
       };
       let bestOverall = null;
       const stats = [];
-      const results = [];
+      // 内层循环直接用局部坐标系算 TCP 目标，避免每点重复查作业面/分配法向
+      const isWall = sf.isWall;
+      const baseNormal = this.scene.surfaceNormal(surface);
+      const tiltStart = sf.vMax - 0.55;
+      const tiltDir = (v) => {
+        const k = U.clamp((v - tiltStart) / 0.55, 0, 1);
+        const th = k * 0.6;
+        return new THREE.Vector3(baseNormal.x * Math.cos(th), Math.sin(th), baseNormal.z * Math.cos(th));
+      };
 
       candidates.forEach((cand) => {
-        const route = this.baseRoute(fromBase, cand);
+        const route = this.baseRoute(fromBase, cand, (surface === 'ceiling' || surface === 'floor') ? 0.66 : 0.55);
         if (!route) return;
         this.robot.setBasePose(cand.x, cand.z, cand.yaw);
         // 同一条连续路径固定肘部分支，分别求解后择优
@@ -1498,8 +1525,13 @@
           const list = [];
           const collideStride = Math.max(1, Math.ceil(dense.length / 160));
           dense.forEach((q) => {
-            const target = this.scene.surfacePoint(surface, q.u, q.v, distance);
-            const sol = this.robot.solveIK(target, normal, preferred, branch);
+            const dir = isWall && q.v > tiltStart ? tiltDir(q.v) : baseNormal;
+            const target = new THREE.Vector3(
+              sf.anchor[0] + sf.uDir[0] * q.u + sf.vDir[0] * q.v,
+              sf.anchor[1] + sf.uDir[1] * q.u + sf.vDir[1] * q.v,
+              sf.anchor[2] + sf.uDir[2] * q.u + sf.vDir[2] * q.v
+            ).addScaledVector(dir, -distance);
+            const sol = this.robot.solveIK(target, dir, preferred, branch);
             if (!sol) { invalid++; return; }
             if (!sol.reachable) unreachable++;
             if (list.length) {
@@ -1531,37 +1563,12 @@
           branch: best.branch, points: best.list.length, unreachable: best.unreachable,
           collisions: best.collisions, cost: Number(total.toFixed(1))
         });
-        results.push({ cand: cand, route: route, best: best, total: total, approach: null });
         if (!bestOverall || total < bestOverall.total) {
           bestOverall = { cand: cand, route: route, best: best, total: total };
         }
       });
 
-      // 底盘落点还要能安全接近首点：拐角处同样的关节直线会甩向墙面，
-      // 因此按代价从低到高挑选“接近可行”的落点，最多尝试 3 个
-      const approachOk = (r) => {
-        const first = r.best.list[0];
-        if (!first) return false;
-        this.robot.setBasePose(r.cand.x, r.cand.z, r.cand.yaw);
-        const fromJ = this.robot.computeTransportJoints().slice();
-        const pos = this.scene.surfacePoint(surface, first.u, first.v, distance);
-        if (this.jointLineClear(fromJ, first.angles, 26)) return true;
-        return !!this.cartesianApproach(fromJ, first.angles, pos, normal, r.best.branch);
-      };
-      const ranked = results.slice().sort((a, b) => a.total - b.total);
-      let chosen = null;
-      for (let i = 0; i < ranked.length && i < 3; i++) {
-        ranked[i].approach = approachOk(ranked[i]);
-        if (ranked[i].approach) { chosen = ranked[i]; break; }
-      }
-      if (!chosen) chosen = ranked.length ? ranked[0] : bestOverall;
-      if (!chosen) {
-        this.robot.setBasePose(fromBase.x, fromBase.z, fromBase.yaw);
-        this.robot.setJoints(startJoints);
-        return null;
-      }
-      bestOverall = chosen;
-
+      // 接近路径运行时会自行避让；避不开也允许穿模继续，因此规划阶段只按喷涂路径择优
       this.robot.setBasePose(fromBase.x, fromBase.z, fromBase.yaw);
       this.robot.setJoints(startJoints);
       this._lastBranchStats = stats;
@@ -1680,9 +1687,10 @@
       if (this.jointLineClear(from, to, 26)) return direct;
       const start = this.path && this.path[0];
       if (!start) return direct;
-      const dir = (this.pathDir || new THREE.Vector3(0, 0, -1)).clone().normalize();
       const surface = start.surface || this.surface;
-      const pos = this.scene.surfacePoint(surface, start.u, start.v, U.clamp(this.params.distance || 0.3, 0.14, 0.65));
+      const dir = this.sprayDirection(surface, start.v);
+      const pos = this.scene.surfacePoint(surface, start.u, start.v, 0)
+        .addScaledVector(dir, -U.clamp(this.params.distance || 0.3, 0.14, 0.65));
       const branches = [this.pathBranch];
       branches.push(this.pathBranch === 1 ? -1 : 1);
       const retracts = [0.3, 0.5, 0.8, 1.1, 1.45];
@@ -1797,7 +1805,8 @@
     roomSelection(surface) {
       const f = C.surfaceFrame(surface);
       if (f.isWall) {
-        return { surface: surface, minX: -f.width / 2 + 0.12, maxX: f.width / 2 - 0.12, minY: 0.12, maxY: f.height - 0.12 };
+        // 全屋任务覆盖到距墙角 5cm、距地/顶 3cm，剩余窄条由扇幅补齐
+        return { surface: surface, minX: -f.width / 2 + 0.05, maxX: f.width / 2 - 0.05, minY: 0.03, maxY: f.height - 0.03 };
       }
       return { surface: surface, minX: -f.width / 2 + 0.15, maxX: f.width / 2 - 0.15, minY: f.vMin + 0.15, maxY: f.vMax - 0.15 };
     },
