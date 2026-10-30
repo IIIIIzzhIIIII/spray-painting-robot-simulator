@@ -251,10 +251,11 @@
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(W + 0.056, 0.012, L + 0.056), M.silver, 'chassis', [0, B1 + 0.018, 0]);
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(W - 0.02, 0.014, L - 0.02), M.bodyBlueDark, 'chassis', [0, B1 + 0.029, 0]);
 
-    // 右侧前后大尺寸花纹轮：对齐原红色万向轮安装位置
+    // 后部大尺寸花纹驱动轮（左右各一，与原后万向轮位置对齐）
     this.driveWheels = [];
     this.casters = [];
     const bigWheel = (x, z) => {
+      const side = x >= 0 ? 1 : -1;
       const spin = new THREE.Group();
       spin.position.set(x, 0.19, z);
       this.chassisGroup.add(spin);
@@ -270,17 +271,17 @@
       for (let i = 0; i < 5; i++) {
         const a = i / 5 * Math.PI * 2 + 0.3;
         this.addMesh(spin, new THREE.CylinderGeometry(0.012, 0.012, 0.014, 8), M.dark, 'chassis',
-          [0.085, Math.cos(a) * 0.062, Math.sin(a) * 0.062], [0, 0, Math.PI / 2]);
+          [side * 0.085, Math.cos(a) * 0.062, Math.sin(a) * 0.062], [0, 0, Math.PI / 2]);
       }
       this.addMesh(spin, new THREE.CylinderGeometry(0.012, 0.012, 0.02, 8), M.yellow, 'chassis',
-        [0.075, 0.112, -0.062], [0, 0, Math.PI / 2]);
+        [side * 0.075, 0.112, -0.062], [0, 0, Math.PI / 2]);
       this.driveWheels.push({ spin: spin, x: x, radius: 0.19 });
     };
-    bigWheel(0.35, 0.43);
+    bigWheel(-0.35, 0.43);
     bigWheel(0.35, -0.43);
 
-    // 左侧保留两组红色聚氨酯万向轮（双轮并排，可 360° 转向）
-    [[-0.255, 0.43], [-0.255, -0.43]].forEach(([x, z]) => {
+    // 前部红色聚氨酯万向轮（双轮并排，可 360° 转向）
+    [[0.255, 0.43], [-0.255, -0.43]].forEach(([x, z]) => {
       const steer = new THREE.Group();
       steer.position.set(x, 0, z);
       this.chassisGroup.add(steer);
