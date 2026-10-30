@@ -251,12 +251,12 @@
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(W + 0.056, 0.012, L + 0.056), M.silver, 'chassis', [0, B1 + 0.018, 0]);
     this.addMesh(this.chassisGroup, new THREE.BoxGeometry(W - 0.02, 0.014, L - 0.02), M.bodyBlueDark, 'chassis', [0, B1 + 0.029, 0]);
 
-    // 驱动轮：大尺寸橡胶胎 + 横向防滑花纹 + 工程塑料轮毂
+    // 右侧前后大尺寸花纹轮：对齐原红色万向轮安装位置
     this.driveWheels = [];
     this.casters = [];
-    [-1, 1].forEach((s) => {
+    const bigWheel = (x, z) => {
       const spin = new THREE.Group();
-      spin.position.set(s * 0.35, 0.19, -0.06);
+      spin.position.set(x, 0.19, z);
       this.chassisGroup.add(spin);
       this.addMesh(spin, new THREE.CylinderGeometry(0.19, 0.19, 0.15, 30), M.rubber, 'chassis', [0, 0, 0], [0, 0, Math.PI / 2]);
       for (let i = 0; i < 16; i++) {
@@ -270,18 +270,17 @@
       for (let i = 0; i < 5; i++) {
         const a = i / 5 * Math.PI * 2 + 0.3;
         this.addMesh(spin, new THREE.CylinderGeometry(0.012, 0.012, 0.014, 8), M.dark, 'chassis',
-          [s * 0.085, Math.cos(a) * 0.062, Math.sin(a) * 0.062], [0, 0, Math.PI / 2]);
+          [0.085, Math.cos(a) * 0.062, Math.sin(a) * 0.062], [0, 0, Math.PI / 2]);
       }
       this.addMesh(spin, new THREE.CylinderGeometry(0.012, 0.012, 0.02, 8), M.yellow, 'chassis',
-        [s * 0.075, 0.112, -0.062], [0, 0, Math.PI / 2]);
-      this.driveWheels.push({ spin: spin, x: s * 0.35, radius: 0.19 });
-      // 轮罩与减震支座
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.035, 0.26, 0.18), M.agvBlueDark, 'chassis', [s * 0.295, 0.20, -0.06]);
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.026, 0.05, 0.10), M.steel, 'chassis', [s * 0.315, 0.34, -0.06]);
-    });
+        [0.075, 0.112, -0.062], [0, 0, Math.PI / 2]);
+      this.driveWheels.push({ spin: spin, x: x, radius: 0.19 });
+    };
+    bigWheel(0.35, 0.43);
+    bigWheel(0.35, -0.43);
 
-    // 四角红色聚氨酯万向轮（双轮并排，可 360° 转向）
-    [[-0.255, 0.43], [0.255, 0.43], [-0.255, -0.43], [0.255, -0.43]].forEach(([x, z]) => {
+    // 左侧保留两组红色聚氨酯万向轮（双轮并排，可 360° 转向）
+    [[-0.255, 0.43], [-0.255, -0.43]].forEach(([x, z]) => {
       const steer = new THREE.Group();
       steer.position.set(x, 0, z);
       this.chassisGroup.add(steer);
@@ -300,6 +299,10 @@
       this.addMesh(steer, new THREE.CylinderGeometry(0.038, 0.038, 0.03, 14), M.steel, 'chassis', [0, 0.168, 0]);
       this.casters.push({ steer: steer, spin: spin, x: x, z: z, radius: 0.072, angle: 0 });
     });
+
+    // 取消中央驱动轮后补全车体底部：下裙板、底板与贯通黄色护边
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.646, 0.034, 1.00), M.agvBlueDark, 'chassis', [0, 0.168, 0]);
+    this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.56, 0.020, 0.92), M.dark, 'chassis', [0, 0.151, 0]);
 
     // 正面特征：内嵌方形避障传感器 + 检修门与锁扣
     const fz = L / 2 + 0.004;
@@ -328,7 +331,8 @@
         this.addMesh(this.chassisGroup, new THREE.CylinderGeometry(0.007, 0.007, 0.006, 8), M.dark, 'chassis',
           [s * (W / 2 + 0.006), 0.30, z], [0, 0, Math.PI / 2]);
       });
-      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.006, 0.024, 0.96), M.yellow, 'chassis', [s * (W / 2 + 0.006), 0.20, 0]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(0.006, 0.024, 1.02), M.yellow, 'chassis', [s * (W / 2 + 0.006), 0.20, 0]);
+      this.addMesh(this.chassisGroup, new THREE.BoxGeometry(W + 0.014, 0.024, 0.006), M.yellow, 'chassis', [0, 0.20, s * (L / 2 + 0.004)]);
     });
 
     // 上层平台：内嵌黑色拉手、固定立柱的内六角螺丝孔
