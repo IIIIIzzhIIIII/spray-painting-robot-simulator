@@ -1172,15 +1172,15 @@
       if (U.isMobile()) ui.setMobileView('motion');
     },
     baseYawFor(x, z, surface, cu, cv) {
-      if (!C.isWallSurface(surface)) {
-        // 天花板/地面：底盘朝向房间中心，避免转运时机械臂伸向最近的墙面
+      // 统一朝向作业区中心：墙面与地板/天花板都让机械臂面朝待喷区域，
+      // 避免作业点落到立柱一侧导致大臂反折穿过立柱
+      const p = this.scene.surfacePoint(surface, cu, cv, 0);
+      const dx = p.x - x, dz = p.z - z;
+      if (Math.hypot(dx, dz) < 0.15) {
         const d = Math.hypot(x, z);
         if (d < 0.25) return C.robot.yawOffset;
         return Math.atan2(-x, -z);
       }
-      const p = this.scene.surfacePoint(surface, cu, cv, 0);
-      const dx = p.x - x, dz = p.z - z;
-      if (Math.hypot(dx, dz) < 0.15) return C.robot.yawOffset;
       return Math.atan2(dx, dz);
     },
 
@@ -1213,22 +1213,18 @@
         push(c.x + n[0] * 1.85 + u[0] * 0.95, c.z + n[2] * 1.85 + u[2] * 0.95);
         push(c.x + n[0] * 1.85 - u[0] * 0.95, c.z + n[2] * 1.85 - u[2] * 0.95);
         push(cur.x, cur.z);
-      } else if (surface === 'ceiling') {
-        push(cu, cv);
-        push(cu - 0.9, cv);
-        push(cu + 0.9, cv);
-        push(cu, cv - 0.9);
-        push(cu, cv + 0.9);
-        // 贴墙拐角时底盘向房间中心退让，避免机械臂上举时肘部折向墙面
-        push(U.clamp(cu, -R.width / 2 + 1.3, R.width / 2 - 1.3),
-          U.clamp(cv, -R.depth / 2 + 1.1, R.depth / 2 - 1.1));
       } else {
-        push(cu, cv + 1.15);
-        push(cu, cv - 1.15);
-        push(cu + 1.15, cv);
-        push(cu - 1.15, cv);
-        push(cu, cv + 1.55);
-        push(cu, cv - 1.55);
+        // 天花板/地面：底盘退到分区外侧并正对分区中心，使全部作业点位于机械臂前方，
+        // 避免上举时肘部反折穿过升降立柱；地面另留 0.55m 净距不压到已喷区域
+        const halfU = (sel.maxX - sel.minX) / 2;
+        const halfV = (sel.maxY - sel.minY) / 2;
+        const gap = surface === 'floor' ? 0.58 : 0.45;
+        const offU = halfU + gap;
+        const offV = halfV + gap;
+        push(cu - offU, cv);
+        push(cu + offU, cv);
+        push(cu, cv - offV);
+        push(cu, cv + offV);
       }
       return out;
     },
@@ -1338,12 +1334,39 @@
     autoLiftFor(surface, sel) {
       const L = C.robot.lift;
       if (!L || !sel) return L ? L.home : 0;
+      // 天花板：升到最高，肩部越高水平可达半径越大，肘部也更远离立柱
+      if (surface === 'ceiling') return L.max;
       const f = C.surfaceFrame(surface);
       const top = C.isWallSurface(surface)
         ? (f.vMin + sel.maxY)
-        : (surface === 'ceiling' ? C.room.height : 0.4);
+        : 0.4;
       const need = Math.max(0, top - 3.0);
       return U.clamp(need * 1.2, L.min, L.max);
+    },
+
+    // 解析判断大臂/小臂是否穿过升降立柱（底盘局部坐标系，避免逐点矩阵更新）
+    armColumnHit(angles, lift) {
+      const R = C.robot;
+      const off = R.armOffsetZ || 0;
+      const sy = R.baseY + R.shoulderY + (lift || 0);
+      const j1 = U.deg(angles[0]), j2 = U.deg(angles[1]), j3 = U.deg(angles[2]);
+      const a = j2 + j3;
+      const eR = R.L1 * Math.cos(j2), eY = -R.L1 * Math.sin(j2);
+      const wR = eR + R.L2 * Math.cos(a), wY = eY - R.L2 * Math.sin(a);
+      const s = Math.sin(j1), c = Math.cos(j1);
+      const box = this._colBox || (this._colBox = { x: 0.33, y0: 0.775, y1: 1.945, z0: -0.50, z1: 0.16 });
+      const m = 0.03;
+      const seg = (ax, ay, az, bx, by, bz) => {
+        for (let i = 0; i <= 5; i++) {
+          const t = i / 5;
+          const x = ax + (bx - ax) * t, y = ay + (by - ay) * t, z = az + (bz - az) * t;
+          if (x > -box.x - m && x < box.x + m && y > box.y0 - m && y < box.y1 + m &&
+            z > box.z0 - m && z < box.z1 + m) return true;
+        }
+        return false;
+      };
+      if (seg(0, sy, off, eR * s, sy + eY, off + eR * c)) return true;
+      return seg(eR * s, sy + eY, off + eR * c, wR * s, sy + wY, off + wR * c);
     },
 
     buildPath() {
@@ -1368,9 +1391,13 @@
         this.lastSafeJoints = startJoints.slice();
       };
       // 大选区直接分区，避免先尝试覆盖整面的超长单点路径（会非常耗时且不可达）
+      // 分区尺寸按机械臂可达半径推导：底盘须退到分区外侧（天花板 0.45m / 地面 0.58m），
+      // 由此得到天花板约 1.5m、地面约 1.25m 的最大边长
+      const maxSpan = C.isWallSurface(surface) ? 1.6 : (surface === 'floor' ? 1.25 : 1.5);
       const spanU = sel.maxX - sel.minX;
       const spanV = sel.maxY - sel.minY;
-      const singleViable = spanU <= 3.2 && (C.isWallSurface(surface) || spanV <= 3.2);
+      const singleViable = spanU <= maxSpan + 0.15 &&
+        (C.isWallSurface(surface) || spanV <= maxSpan + 0.15);
       const single = singleViable ? this.planRect(surface, sel, savedBase, startJoints) : null;
       let jobs = [];
       let panelized = false;
@@ -1378,11 +1405,8 @@
       if (single && single.unreachable <= 8) {
         jobs = [single];
       } else {
-        // 选区超出单点作业范围时，沿墙面长度方向分成多个分区，
+        // 选区超出单点作业范围时分成多个分区，
         // 每个分区由底盘重新定位后再用机械臂全伸喷涂
-        const maxSpan = C.isWallSurface(surface)
-          ? 1.6
-          : (this._roomMode ? 2.0 : 2.4);
         const panels = this.splitPanels(surface, sel, maxSpan);
         if (panels.length > 1) {
           let from = savedBase;
@@ -1462,6 +1486,7 @@
     // 以给定底盘位姿为起点，为单个矩形选区规划 S 形路径
     planRect(surface, sel, fromBase, startJoints) {
       const p = this.params;
+      const liftNow = this.robot.getLift();
       const fan = U.clamp(p.fanWidth || 0.3, 0.1, 0.6);
       // 行距取半扇幅，相邻行程重叠 50%，避免行间出现漏喷条纹
       const gap = Math.max(0.05, fan * 0.5);
@@ -1676,7 +1701,10 @@
             ).addScaledVector(dir, -distance);
             const sol = this.robot.solveIK(target, dir, preferred, branch);
             if (!sol) { invalid++; return; }
-            if (!sol.reachable) unreachable++;
+            // 仅把明显偏离目标的解计为不可达（贴边界的轻微伸缩不影响覆盖，避免误报上千点）
+            if (!sol.reachable && (sol.posError > 0.05 || sol.dirError > 5)) unreachable++;
+            // 立柱穿模按点计分：肘部反折穿过立柱的位姿会被显著加价，自动改选正向姿态
+            if (this.armColumnHit(sol.angles, liftNow)) collisions++;
             if (list.length) {
               const jump = jointJump(preferred, sol.angles);
               pathMax = Math.max(pathMax, jump);
@@ -1686,7 +1714,7 @@
             list.push({ u: q.u, v: q.v, surface: surface, angles: sol.angles });
           });
           this.robot.setJoints(startJoints);
-          const cost = invalid * 1000 + unreachable * 50 + pathMax * 2 +
+          const cost = invalid * 1000 + unreachable * 50 + collisions * 30 + pathMax * 2 +
             (pathSum / Math.max(1, list.length - 1)) * 0.5;
           return { branch: branch, list: list, unreachable: unreachable + invalid, collisions: collisions, pathMax: pathMax, cost: cost };
         };
