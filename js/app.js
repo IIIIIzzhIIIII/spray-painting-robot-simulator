@@ -1686,7 +1686,6 @@
             list.push({ u: q.u, v: q.v, surface: surface, angles: sol.angles });
           });
           this.robot.setJoints(startJoints);
-          // 运行时可穿模继续作业，规划阶段不再做逐点碰撞采样，仅按可达性与关节连续性择优
           const cost = invalid * 1000 + unreachable * 50 + pathMax * 2 +
             (pathSum / Math.max(1, list.length - 1)) * 0.5;
           return { branch: branch, list: list, unreachable: unreachable + invalid, collisions: collisions, pathMax: pathMax, cost: cost };
@@ -1805,7 +1804,10 @@
       for (let i = 0; i <= n; i++) {
         const u = i / n;
         this.robot.setJoints(U.lerpJoints(from, to, u));
-        if (this.scene.checkCollision(this.robot.getSamplePoints(), 0.03).hit) return false;
+        const pts = this.robot.getSamplePoints();
+        if (this.scene.checkCollision(pts, 0.03).hit) return false;
+        // 同时检查机械臂与立柱/底盘的自身碰撞，避免接近过程中穿过机身
+        if (this.robot.bodyCollision(pts, 0.04).hit) return false;
       }
       return true;
     },
@@ -2093,10 +2095,20 @@
       ui.setStatus('moving', '自动作业准备中');
       ui.setInterlock(true, '自动作业进行中');
       ui.setPathButtons({ hasPath: true, hasSelection: !!this.selection, running: true });
-      ui.setSelectInfo('机器臂折叠转运…');
       ui.log('开始自动作业 · ' + this.toolName() + ' · ' +
         this.surfaceName(this.selection.surface || this.surface) +
         ' / ' + this.path.length + ' 点', 'ok');
+      const b0 = this.robot.getBasePose();
+      const nearBase = !!(this.pathBase &&
+        Math.hypot(b0.x - this.pathBase.x, b0.z - this.pathBase.z) < 0.2 &&
+        Math.abs(U.norm180(U.rad(b0.yaw - this.pathBase.yaw))) < 8);
+      if (nearBase) {
+        // 底盘已在作业位，无需折叠转运，直接调整机械臂到起点
+        ui.setSelectInfo('机械臂调整至作业起点…');
+        this.beginPathMotion();
+        return;
+      }
+      ui.setSelectInfo('机器臂折叠转运…');
       this.foldToTransport(() => {
         const b = this.robot.getBasePose();
         const near = this.pathBase && Math.hypot(b.x - this.pathBase.x, b.z - this.pathBase.z) < 0.15;
@@ -2269,6 +2281,24 @@
       if (!this.path || this.path.length < 2) return;
       const from = this.robot.getJoints().slice();
       const to = this.path[0].angles.slice();
+      let maxDelta = 0;
+      for (let i = 0; i < 6; i++) maxDelta = Math.max(maxDelta, Math.abs(U.norm180(to[i] - from[i])));
+      if (maxDelta < 2.5) {
+        // 已基本处于起点位姿，直接开始作业，省去多余的接近动作
+        this.robot.setJoints(to);
+        this.pathRun = {
+          phase: 'work', approachIndex: 0, segments: [], t: 0, dur: 0,
+          index: 0, segT: 0, travel: 0, startIndex: 0, startFrac: 0, startSegT: 0, startTravel: 0,
+          syncClock: 0, collisionClock: 0
+        };
+        this.state = 'spraying';
+        ui.setStatus('spraying', 'S 路径' + this.toolVerb() + '中');
+        ui.setInterlock(true, '自动作业进行中');
+        ui.setSelectInfo(this.toolVerb() + '中 0% · 0.0 / ' + (this.taskTotalLength || this.pathLength).toFixed(1) + ' m');
+        this.setSpray(true, true);
+        ui.log('机械臂已到位，直接开始' + this.toolVerb(), 'ok');
+        return;
+      }
       const segments = this.approachSegments(from, to);
       const first = segments[0];
       this.pathRun = {
@@ -2385,6 +2415,19 @@
       ui.setStatus('moving', '分区完成 · 前往下一分区');
       ui.setSelectInfo('分区完成 · 底盘重新定位');
       ui.setInterlock(true, '自动作业进行中');
+      const nextJobData = this.pathJobs ? this.pathJobs[this.jobIndex + 1] : null;
+      const targetBase = nextJobData ? nextJobData.base : null;
+      const bNow = this.robot.getBasePose();
+      const nearNext = !!(targetBase &&
+        Math.hypot(bNow.x - targetBase.x, bNow.z - targetBase.z) < 0.2 &&
+        Math.abs(U.norm180(U.rad(bNow.yaw - targetBase.yaw))) < 8);
+      if (nearNext) {
+        // 下一分区与当前底盘位姿重合，跳过折叠与行驶，直接切换起点
+        this.jobIndex++;
+        this.applyJob(this.jobIndex);
+        this.beginPathMotion();
+        return;
+      }
       this.foldToTransport(() => {
         this.jobIndex++;
         this.applyJob(this.jobIndex);
