@@ -277,11 +277,11 @@
         [side * 0.075, 0.112, -0.062], [0, 0, Math.PI / 2]);
       this.driveWheels.push({ spin: spin, x: x, radius: 0.19 });
     };
-    bigWheel(-0.35, 0.43);
+    bigWheel(-0.35, -0.43);
     bigWheel(0.35, -0.43);
 
     // 前部红色聚氨酯万向轮（双轮并排，可 360° 转向）
-    [[0.255, 0.43], [-0.255, -0.43]].forEach(([x, z]) => {
+    [[-0.255, 0.43], [0.255, 0.43]].forEach(([x, z]) => {
       const steer = new THREE.Group();
       steer.position.set(x, 0, z);
       this.chassisGroup.add(steer);
